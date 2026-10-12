@@ -1,0 +1,52 @@
+# Parâmetros objetivos do currículo.
+# O aplicativo lê este arquivo a cada geração, então pode editar à vontade.
+# As regras de escrita (tom, voz, estilo dos bullets) ficam em guidelines.md.
+
+idioma_padrao: pt
+
+# Limite de páginas do PDF. Se passar, o aplicativo avisa.
+max_paginas: 2
+
+# Tamanho do resumo, em palavras.
+resumo_max_palavras: 70
+
+# Máximo de bullets por experiência, da mais recente para a mais antiga.
+# O último número vale para todas as experiências seguintes.
+bullets_por_experiencia: [5, 4, 3, 2]
+
+# Máximo de grupos na seção de competências.
+max_grupos_competencias: 6
+
+# O que fazer com um item que a IA escreveu sem apontar um fato confirmado da base.
+# remover = tira do currículo e mostra o que foi tirado (recomendado)
+# manter_com_aviso = mantém e só avisa
+bullets_sem_fonte: remover
+
+# Ordem das seções. Para tirar uma seção, apague o nome daqui.
+ordem_secoes: [resumo, competencias, experiencia, formacao, certificacoes, idiomas]
+
+titulos_secoes:
+  pt:
+    resumo: Resumo
+    competencias: Competências
+    experiencia: Experiência Profissional
+    formacao: Formação
+    certificacoes: Certificações
+    idiomas: Idiomas
+  en:
+    resumo: Summary
+    competencias: Core Skills
+    experiencia: Professional Experience
+    formacao: Education
+    certificacoes: Certifications
+    idiomas: Languages
+
+meses:
+  pt: [Janeiro, Fevereiro, Março, Abril, Maio, Junho, Julho, Agosto, Setembro, Outubro, Novembro, Dezembro]
+  en: [January, February, March, April, May, June, July, August, September, October, November, December]
+
+atual:
+  pt: Presente
+  en: Present
+
+separador_datas: "–"

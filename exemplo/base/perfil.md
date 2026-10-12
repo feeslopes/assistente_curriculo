@@ -1,0 +1,2 @@
+- [confirmado] Busca vagas de marketing digital com foco em performance e análise de dados.
+- [confirmado] Prefere atuar em empresas de produto digital e e-commerce.

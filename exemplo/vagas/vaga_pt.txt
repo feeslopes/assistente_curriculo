@@ -1,0 +1,20 @@
+Analista de Marketing de Performance - Pleno
+
+A Empresa Fictícia Ltda. busca uma pessoa para atuar em nossa equipe de marketing digital.
+
+Responsabilidades
+- Gerenciar campanhas de mídia paga no Google Ads e Meta Ads
+- Acompanhar métricas de funil (CAC, CPL, ROAS) e propor otimizações
+- Criar relatórios e dashboards no Looker Studio
+- Trabalhar em conjunto com as áreas de produto e vendas
+
+Requisitos obrigatórios
+- Experiência de 3 anos ou mais com mídia paga
+- Conhecimento avançado de Google Analytics
+- Domínio de Excel ou Google Sheets
+- Inglês intermediário
+
+Diferenciais
+- Experiência com automação de marketing (RD Station ou HubSpot)
+- Conhecimento de SQL
+- Experiência com testes A/B e CRO

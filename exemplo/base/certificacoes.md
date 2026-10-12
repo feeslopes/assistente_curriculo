@@ -1,0 +1,1 @@
+- [confirmado] Google Analytics Certification | Google | 2021

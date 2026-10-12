@@ -1,0 +1,3 @@
+- [confirmado] Português: Nativo
+- [confirmado] Inglês: Avançado
+- [confirmado] Espanhol: Intermediário

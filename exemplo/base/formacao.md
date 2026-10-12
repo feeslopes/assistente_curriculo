@@ -1,0 +1,1 @@
+- [confirmado] Universidade Exemplo | Bacharelado em Publicidade e Propaganda | 2014 – 2018

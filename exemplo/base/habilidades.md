@@ -1,0 +1,4 @@
+- [confirmado] Usa Google Analytics e planilhas avançadas (tabelas dinâmicas, PROCV) para acompanhar campanhas.
+- [confirmado] Gerencia campanhas pagas no Google Ads e no Meta Ads.
+- [confirmado] Escreve SQL básico para consultar a base de clientes.
+- [sugerido] Conhece HubSpot (a pessoa mencionou de passagem, confirmar o nível de uso).

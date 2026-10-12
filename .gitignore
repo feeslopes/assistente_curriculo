@@ -1,0 +1,27 @@
+# Segredos e ambiente local
+.env
+.venv/
+__pycache__/
+*.pyc
+.streamlit/secrets.toml
+.claude/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Dados pessoais: nunca versionar
+base/*
+!base/.gitkeep
+saidas/
+
+# Currículos e vagas reais usados em testes locais (contêm telefone, e-mail e histórico de verdade).
+# Só os arquivos fictícios de exemplo (exemplo/base e vaga_pt.txt, vaga_en.txt) vão para o Git.
+*.pdf
+*.docx
+exemplo/vagas/*
+!exemplo/vagas/vaga_pt.txt
+!exemplo/vagas/vaga_en.txt
+
+# Nota do kit original (instruções para iniciar o projeto no Claude Code); não faz parte do repositório
+COMECE_AQUI.md
