@@ -216,6 +216,47 @@ class KB:
     def linhas_sem_marca(self) -> int:
         return sum(a.sem_marca() for a in self.arquivos().values())
 
+    def lacunas(self) -> list[dict]:
+        """O que ainda falta na base, para o entrevistador perguntar só isso.
+
+        Cada item: {"tipo", "slug", "rotulo", "empresa", "cargo"}. Tipos: sem_experiencias, poucos_fatos,
+        sem_numeros (experiência sem nenhum número registrado) e secao_vazia (formação, idiomas...).
+        """
+        arqs = self.arquivos()
+        exps = self.experiencias()
+        saida: list[dict] = []
+        if not exps:
+            saida.append({"tipo": "sem_experiencias", "slug": "", "rotulo": "experiências profissionais",
+                          "empresa": "", "cargo": ""})
+        for a in exps:
+            fs = a.fatos()
+            base = {"slug": a.slug, "empresa": a.meta["empresa"], "cargo": a.meta["cargo"]}
+            nome = f"{a.meta['cargo']} na {a.meta['empresa']}"
+            if len(fs) < 3:
+                saida.append({"tipo": "poucos_fatos", "rotulo": f"{nome}: poucos detalhes ({len(fs)} fato(s))", **base})
+            elif not re.search(r"\d", " ".join(f.texto for f in fs)):
+                saida.append({"tipo": "sem_numeros", "rotulo": f"{nome}: nenhum número ou resultado medido", **base})
+        for slug, rotulo in (("formacao", "formação"), ("idiomas", "idiomas"),
+                             ("habilidades", "ferramentas e habilidades"), ("perfil", "objetivo profissional")):
+            a = arqs.get(slug)
+            if not a or not a.fatos():
+                saida.append({"tipo": "secao_vazia", "slug": slug, "rotulo": rotulo, "empresa": "", "cargo": ""})
+        return saida
+
+    def diagnostico(self) -> list[str]:
+        """Avisos sobre uma base que provavelmente está incompleta (a análise de vaga só enxerga o confirmado)."""
+        avisos = []
+        confirmados = len(self.fatos("confirmado"))
+        pendentes = len(self.fatos("sugerido"))
+        if pendentes:
+            avisos.append(f"{pendentes} fato(s) pendente(s) NÃO contam na análise. Confirme ou remova na aba Minha base.")
+        vazias = [r["rotulo"] for r in self.lacunas() if r["tipo"] == "secao_vazia"]
+        if vazias:
+            avisos.append("A base não tem: " + ", ".join(vazias) + ". Se você importou um currículo, confira se salvou a revisão.")
+        if len(self.experiencias()) < 2 and confirmados:
+            avisos.append("A base tem menos de duas experiências. Se o seu histórico é maior, algo não foi salvo.")
+        return avisos
+
     def vazia(self) -> bool:
         return not self.fatos() and not self.contato()
 

@@ -74,7 +74,7 @@ def analisar(llm, kb: KB, vaga: str) -> dict:
         {"role": "system", "content": config.ler_prompt("analisador")},
         {"role": "user", "content": f"## Vaga\n{vaga.strip()}\n\n## Base confirmada\n{kb.para_prompt()}"},
     ]
-    return validar_analise(completar_json(llm, msgs), ids_ok)
+    return validar_analise(completar_json(llm, msgs, rotulo="analisador"), ids_ok)
 
 
 def perguntas_lacuna(analise: dict) -> list[dict]:
@@ -142,7 +142,7 @@ def gerar(llm, kb: KB, vaga: str, analise: dict, idioma: str, cfg: dict | None =
         f"## Base confirmada (use somente isto)\n{kb.para_prompt()}"
     )
     bruto = completar_json(llm, [{"role": "system", "content": sistema}, {"role": "user", "content": usuario}],
-                           temperatura=0.3)
+                           temperatura=0.3, rotulo="gerador")
     palavras = analise.get("palavras_chave", [])
     cv = render.montar(kb, bruto, idioma, cfg, titulo_usuario, fiscal="pendente" if verificar_ia else "ausente")
     cob = cobertura_palavras(palavras, cv.corpo, kb.textos_confirmados(), cv.mesmo_idioma)
@@ -187,7 +187,7 @@ def verificar_com_ia(llm, kb: KB, itens: list[dict], palavras_pendentes: list[st
         usuario += ("\n\n## PALAVRAS-CHAVE da vaga para classificar\n" + "\n".join(f"- {p}" for p in palavras_pendentes)
                     + f"\n\n## Base completa de fatos\n{kb.para_prompt()}")
     bruto = completar_json(llm, [{"role": "system", "content": config.ler_prompt("verificador")},
-                                 {"role": "user", "content": usuario}], temperatura=0.0)
+                                 {"role": "user", "content": usuario}], temperatura=0.0, rotulo="verificador")
     bruto = bruto if isinstance(bruto, dict) else {}
     problemas = {}
     for p in bruto.get("problemas") or []:
@@ -239,7 +239,8 @@ def sugerir_traducoes(llm, kb: KB, idioma: str) -> list[dict]:
     entrada = {"idioma_destino": idioma,
                "itens": [{"slug": e.slug, "cargo": e.meta["cargo"], "local": e.meta.get("local", "")} for e in pendentes]}
     bruto = completar_json(llm, [{"role": "system", "content": config.ler_prompt("tradutor_cargos")},
-                                 {"role": "user", "content": json.dumps(entrada, ensure_ascii=False)}], temperatura=0.0)
+                                 {"role": "user", "content": json.dumps(entrada, ensure_ascii=False)}], temperatura=0.0,
+                           rotulo="tradutor_cargos")
     por_slug = {str(t.get("slug")): t for t in (bruto.get("traducoes") if isinstance(bruto, dict) else []) or []
                 if isinstance(t, dict)}
     saida = []

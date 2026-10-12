@@ -44,17 +44,58 @@ class Proposta:
 
 # ---------------------------------------------------------------------- entrevista
 
-def _sistema_entrevistador(kb: KB) -> str:
-    return config.ler_prompt("entrevistador") + "\n\n## Resumo da base atual\n" + kb.resumo_entrevista()
+PERGUNTA_POR_SECAO = {
+    "formacao": "qual é a sua formação (curso, instituição e ano)?",
+    "idiomas": "quais idiomas você fala e em que nível?",
+    "habilidades": "quais ferramentas e métodos você usa no dia a dia de trabalho?",
+    "perfil": "que tipo de vaga você busca agora?",
+}
 
 
-def responder(llm, kb: KB, historico: list[dict], mensagem: str) -> str:
-    """Uma rodada do chat. `historico` tem dicts {role, content} (sem a abertura estática)."""
-    msgs = [{"role": "system", "content": _sistema_entrevistador(kb)}]
-    msgs.append({"role": "assistant", "content": ABERTURA})
+def abertura(kb: KB) -> str:
+    """Abertura da conversa, montada sem chamar a IA. Com a base já preenchida, não repete o básico."""
+    if not kb.fatos():
+        return ABERTURA
+    exps = kb.experiencias()
+    lacunas = kb.lacunas()
+    texto = (f"Oi! A sua base já tem {len(exps)} experiência(s) e {len(kb.fatos('confirmado'))} fato(s) "
+             "confirmado(s), então não vou repetir o que já está nela. ")
+    if not lacunas:
+        return texto + ("A base parece completa. Se quiser, escolha uma experiência para aprofundar, ou vá para a aba "
+                        "2 e use uma vaga.")
+    texto += "O que ainda falta: " + "; ".join(l["rotulo"] for l in lacunas[:3]) + ".\n\nPara começar: "
+    p = lacunas[0]
+    if p["tipo"] in ("poucos_fatos", "sem_numeros"):
+        return texto + (f"na experiência de {p['cargo']} na {p['empresa']}, qual resultado concreto você alcançou? "
+                        "De preferência com um número, mesmo que seja estimativa.")
+    if p["tipo"] == "sem_experiencias":
+        return texto + "qual é o seu trabalho atual (ou o mais recente) e o que você faz nele no dia a dia?"
+    return texto + PERGUNTA_POR_SECAO[p["slug"]]
+
+
+def _sistema_entrevistador(kb: KB, pendentes: list[str] | None = None) -> str:
+    partes = [config.ler_prompt("entrevistador"), "## Resumo da base atual\n" + kb.resumo_entrevista()]
+    lacunas = kb.lacunas()
+    partes.append("## O que ainda falta na base (pergunte SÓ sobre isto)\n"
+                  + ("\n".join(f"- {l['rotulo']}" for l in lacunas) if lacunas else
+                     "- Nada essencial. Pergunte apenas se a pessoa quiser aprofundar algo."))
+    if pendentes:
+        partes.append("## Já informado, aguardando a revisão da pessoa (NÃO pergunte de novo)\n"
+                      + "\n".join(f"- {t[:200]}" for t in pendentes[:80]))
+    return "\n\n".join(partes)
+
+
+def responder(llm, kb: KB, historico: list[dict], mensagem: str, pendentes: list[str] | None = None) -> str:
+    """Uma rodada do chat. `historico` tem dicts {role, content} (sem a abertura estática).
+
+    `pendentes`: textos de fatos que a pessoa ainda não revisou (por exemplo, de um currículo importado).
+    O entrevistador os trata como já informados, para não perguntar de novo.
+    """
+    msgs = [{"role": "system", "content": _sistema_entrevistador(kb, pendentes)}]
+    msgs.append({"role": "assistant", "content": abertura(kb)})
     msgs += [{"role": m["role"], "content": m["content"]} for m in historico[-MAX_TURNOS_CONTEXTO:]]
     msgs.append({"role": "user", "content": mascarar_contato(mensagem)})
-    return llm.conversar(msgs, temperatura=0.5)
+    return llm.conversar(msgs, temperatura=0.5, rotulo="entrevistador")
 
 
 # ---------------------------------------------------------------------- extração
@@ -86,7 +127,7 @@ def transcricao(historico: list[dict]) -> str:
 
 def extrair(llm, kb: KB, material: str, origem: str = "entrevista") -> list[Proposta]:
     """origem: 'entrevista', 'curriculo importado' ou 'respostas'."""
-    bruto = completar_json(llm, _entrada_extrator(kb, material, origem))
+    bruto = completar_json(llm, _entrada_extrator(kb, material, origem), rotulo="extrator")
     return validar_propostas(bruto, kb, detectar_idioma(material), material)
 
 

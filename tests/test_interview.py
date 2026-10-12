@@ -147,3 +147,31 @@ class TestDatasInventadas(unittest.TestCase):
         props = interview.validar_propostas(self.bruto(), self.kb, "pt", "Entrei na Empresa Teste em janeiro de 2022.")
         self.assertEqual(props[0].meta["inicio"], "2022-01")
         self.assertEqual(props[0].problemas, [])
+
+
+class TestAberturaDinamica(unittest.TestCase):
+    def setUp(self):
+        self.kb, self.tmp = base_exemplo()
+
+    def tearDown(self):
+        limpar(self.tmp)
+
+    def test_base_vazia_usa_a_abertura_padrao(self):
+        from src.kb import KB
+        self.assertEqual(interview.abertura(KB(self.tmp / "vazia")), interview.ABERTURA)
+
+    def test_base_preenchida_nao_repete_o_basico(self):
+        t = interview.abertura(self.kb)
+        self.assertIn("não vou repetir", t)
+        self.assertIn("experiência(s)", t)
+        self.assertNotIn("qual é o seu trabalho atual", t)
+        self.assertNotIn("—", t)
+
+    def test_responder_inclui_o_que_falta_e_os_pendentes(self):
+        llm = LLMFalso("Qual foi o resultado?")
+        interview.responder(llm, self.kb, [], "oi", pendentes=["Domina Excel avançado."])
+        sistema = llm.chamadas[0]["mensagens"][0]["content"]
+        self.assertIn("O que ainda falta na base", sistema)
+        self.assertIn("aguardando a revisão", sistema)
+        self.assertIn("Domina Excel avançado.", sistema)
+        self.assertNotEqual(llm.chamadas[0]["mensagens"][1]["content"], interview.ABERTURA)  # abertura dinâmica

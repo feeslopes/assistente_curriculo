@@ -21,8 +21,8 @@ class LLMFalso:
         self.fila = [r if isinstance(r, str) else json.dumps(r, ensure_ascii=False) for r in respostas]
         self.chamadas = []
 
-    def conversar(self, mensagens, json_mode=False, temperatura=0.3):
-        self.chamadas.append({"mensagens": copy.deepcopy(mensagens), "json_mode": json_mode})
+    def conversar(self, mensagens, json_mode=False, temperatura=0.3, rotulo=""):
+        self.chamadas.append({"mensagens": copy.deepcopy(mensagens), "json_mode": json_mode, "rotulo": rotulo})
         if not self.fila:
             raise AssertionError("LLMFalso: fila de respostas esgotada")
         return self.fila.pop(0)
