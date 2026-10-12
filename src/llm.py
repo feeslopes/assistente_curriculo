@@ -83,15 +83,14 @@ class LLM:
     """Uma classe, uma rota (/chat/completions). A sessão HTTP é injetável para testes."""
 
     def __init__(self, cfg: Configuracao, sessao=None, dormir=time.sleep, timeout: int = 180,
-                 segredos: list[str] | None = None, debug_log: Path | None = None):
+                 segredos: list[str] | None = None, log_dir: Path | None = None):
         self.cfg = cfg
         self.sessao = sessao or requests.Session()
         self._dormir = dormir
         self.timeout = timeout
         self.segredos: list[str] = []
         self.definir_segredos(segredos or [])
-        self.debug_log = debug_log if debug_log else (
-            Path("saidas") / "debug.log" if os.environ.get("CV_DEBUG") else None)
+        self.log_dir = Path(log_dir) if log_dir else None
 
     # ---------------------------------------------------------------- privacidade
     def definir_segredos(self, valores) -> None:
@@ -108,27 +107,48 @@ class LLM:
     def _cabecalhos(self) -> dict:
         return {"Authorization": f"Bearer {self.cfg.chave}", "Content-Type": "application/json"}
 
-    def _log(self, corpo: dict) -> None:
-        if not self.debug_log:
+    def _registrar(self, rotulo: str, mensagens: list[dict], json_mode: bool, resposta: str | None,
+                   erro: str | None, duracao: float) -> None:
+        """Uma linha por chamada em log_dir/AAAA-MM-DD.jsonl, para depurar e melhorar os prompts.
+
+        Grava o que foi enviado DEPOIS da máscara de contato (então não guarda telefone nem e-mail) e a
+        resposta recebida. A chave de API nunca entra. Falha ao gravar o log nunca derruba o aplicativo.
+        """
+        if not self.log_dir:
             return
         try:
-            self.debug_log.parent.mkdir(parents=True, exist_ok=True)
-            with open(self.debug_log, "a", encoding="utf-8") as f:
-                f.write(f"--- {datetime.now().isoformat()} {self.cfg.provedor}/{self.cfg.modelo}\n")
-                f.write(json.dumps(corpo, ensure_ascii=False, indent=1) + "\n")
-        except OSError:
+            self.log_dir.mkdir(parents=True, exist_ok=True)
+            agora = datetime.now()
+            registro = {
+                "quando": agora.isoformat(timespec="seconds"), "provedor": self.cfg.provedor,
+                "modelo": self.cfg.modelo, "rotulo": rotulo, "json_mode": json_mode,
+                "duracao_s": round(duracao, 2), "mensagens": mensagens, "resposta": resposta, "erro": erro,
+            }
+            with open(self.log_dir / f"{agora:%Y-%m-%d}.jsonl", "a", encoding="utf-8") as f:
+                f.write(json.dumps(registro, ensure_ascii=False) + "\n")
+        except (OSError, TypeError, ValueError):
             pass
 
-    def conversar(self, mensagens: list[dict], json_mode: bool = False, temperatura: float = 0.3) -> str:
+    def conversar(self, mensagens: list[dict], json_mode: bool = False, temperatura: float = 0.3,
+                  rotulo: str = "") -> str:
         """Envia as mensagens e devolve o texto da resposta. Não defina max_tokens: modelos de
-        raciocínio gastam tokens pensando e a resposta pode vir vazia."""
+        raciocínio gastam tokens pensando e a resposta pode vir vazia.
+
+        `rotulo` só identifica a chamada no registro (entrevistador, extrator, gerador...)."""
         limpas = [{"role": m["role"], "content": self._limpar(m["content"])} for m in mensagens]
         corpo = {"model": self.cfg.modelo, "messages": limpas, "temperature": temperatura}
         corpo.update(self.cfg.extras)
         if json_mode:
             corpo["response_format"] = {"type": "json_object"}
-        self._log(corpo)
-        return self._enviar(corpo)
+        inicio, resposta, erro = time.time(), None, None
+        try:
+            resposta = self._enviar(corpo)
+            return resposta
+        except ErroLLM as e:
+            erro = str(e)
+            raise
+        finally:
+            self._registrar(rotulo, limpas, json_mode, resposta, erro, time.time() - inicio)
 
     def modelos(self) -> list[str]:
         url = f"{self.cfg.base_url}/models"
@@ -224,9 +244,9 @@ class LLM:
         return texto
 
 
-def completar_json(llm, mensagens: list[dict], temperatura: float = 0.2):
+def completar_json(llm, mensagens: list[dict], temperatura: float = 0.2, rotulo: str = ""):
     """Pede JSON, tolera sujeira e faz UMA tentativa de reparo antes de desistir."""
-    bruto = llm.conversar(mensagens, json_mode=True, temperatura=temperatura)
+    bruto = llm.conversar(mensagens, json_mode=True, temperatura=temperatura, rotulo=rotulo)
     try:
         return extrair_json(bruto)
     except ValueError:
@@ -236,7 +256,7 @@ def completar_json(llm, mensagens: list[dict], temperatura: float = 0.2):
         {"role": "user", "content": "A resposta anterior não era um JSON válido. "
                                     "Devolva somente o JSON, sem texto antes ou depois."},
     ]
-    bruto = llm.conversar(reparo, json_mode=True, temperatura=0.0)
+    bruto = llm.conversar(reparo, json_mode=True, temperatura=0.0, rotulo=f"{rotulo}-reparo")
     try:
         return extrair_json(bruto)
     except ValueError:

@@ -154,7 +154,139 @@ class TestApp(unittest.TestCase):
         contato = KB(kb2_dir).contato()
         self.assertEqual(contato["email"], "ana@exemplo.com")
         self.assertEqual(contato["nome"], "Ana Souza")
-        self.assertEqual(len(self.st.session_state["rev_entrevista"]), 1)
+        self.assertEqual(len(self.st.session_state["rev_importacao"]), 1)
+
+    def test_importacao_nao_some_quando_a_conversa_encerra_a_rodada(self):
+        """Bug real: a revisão do CV importado era substituída pela revisão da conversa."""
+        imp = {"propostas": [{"destino": "habilidades", "meta": {},
+                              "fatos": [{"texto": "Domina Excel avançado.", "origem": "dito"}]}]}
+        conv = {"propostas": [{"destino": "habilidades", "meta": {},
+                               "fatos": [{"texto": "Usa Notion para documentar.", "origem": "dito"}]}]}
+        llm = self.usar_llm(imp, "Qual foi o resultado?", conv)
+        cv = "Ana Souza\nAnalista\n" + "Trabalhou com análise de dados e relatórios. " * 5
+        self.st.uploads["up_curriculo"] = stub.ArquivoFalso("cv.txt", cv.encode("utf-8"))
+        self.st.cliques = {"btn_importar"}
+        self.rodar()
+        self.assertEqual(len(self.st.session_state["rev_importacao"]), 1)
+        self.st.cliques = set()
+        self.st.chat = ["Trabalho com marketing"]
+        self.rodar()
+        # o entrevistador soube do que está aguardando revisão e não vai perguntar de novo
+        sistema = llm.chamadas[1]["mensagens"][0]["content"]
+        self.assertIn("aguardando a revisão", sistema)
+        self.assertIn("Domina Excel avançado.", sistema)
+        self.st.cliques = {"btn_encerrar"}
+        self.rodar()
+        self.assertEqual(len(self.st.session_state["rev_importacao"]), 1)    # continua lá
+        self.assertEqual(len(self.st.session_state["rev_entrevista"]), 1)    # e a da conversa é outra
+        self.st.cliques = {"Salvar marcados como confirmados"}
+        self.rodar()
+        textos = [f.texto for f in self.kb.fatos("confirmado")]
+        self.assertIn("Domina Excel avançado.", textos)
+
+    def test_encerrar_bloqueado_enquanto_ha_revisao_da_conversa_pendente(self):
+        proposta = {"propostas": [{"destino": "habilidades", "meta": {},
+                                   "fatos": [{"texto": "Fato novo.", "origem": "dito"}]}]}
+        llm = self.usar_llm("ok", proposta)
+        self.st.chat = ["oi"]
+        self.rodar()
+        self.st.cliques = {"btn_encerrar"}
+        self.rodar()
+        self.st.cliques = {"btn_encerrar"}   # segundo clique: o botão está desabilitado
+        self.rodar()
+        self.assertEqual(len(llm.chamadas), 2)
+
+    def test_descartar_revisao(self):
+        self.usar_llm("ok", {"propostas": [{"destino": "habilidades", "meta": {},
+                                            "fatos": [{"texto": "Fato novo.", "origem": "dito"}]}]})
+        self.st.chat = ["oi"]
+        self.rodar()
+        self.st.cliques = {"btn_encerrar"}
+        self.rodar()
+        self.st.cliques = {"btn_descartar_ent"}
+        self.rodar()
+        self.assertIsNone(self.st.session_state["rev_entrevista"])
+        self.assertNotIn("Fato novo.", [f.texto for f in self.kb.fatos()])
+
+    def test_aba_vaga_avisa_base_incompleta_e_revisao_nao_salva(self):
+        from src.interview import FatoProposto, Proposta
+        self.st.session_state["rev_importacao"] = [Proposta("habilidades", [FatoProposto("Fato.", "dito")])]
+        self.rodar()
+        avisos = self.textos("warning")
+        self.assertIn("aguardando a sua revisão", avisos)
+        self.assertIn("pendente", avisos)     # a base de exemplo tem 2 fatos [sugerido]
+
+    def reiniciar(self):
+        """Simula fechar e abrir o aplicativo: memória nova, mesma pasta de base."""
+        self.st = stub.FakeStreamlit()
+        sys.modules["streamlit"] = self.st
+        sys.modules.pop("app", None)
+        self.app = importlib.import_module("app")
+
+    def test_conversa_e_revisoes_sobrevivem_a_fechar_o_aplicativo(self):
+        proposta = {"propostas": [{"destino": "habilidades", "meta": {},
+                                   "fatos": [{"texto": "Usa Notion para documentar.", "origem": "dito"}]}]}
+        self.usar_llm("Qual foi o resultado?", proposta)
+        self.st.chat = ["Trabalho com marketing"]
+        self.rodar()
+        self.st.cliques = {"btn_encerrar"}
+        self.rodar()
+        antes = self.st.session_state["chat"]
+        self.assertTrue(self.st.session_state["rev_entrevista"])
+        # fecha e abre de novo
+        self.reiniciar()
+        self.rodar()
+        self.assertEqual(self.st.session_state["chat"], antes)
+        self.assertEqual(self.st.session_state["rev_entrevista"][0].fatos[0].texto, "Usa Notion para documentar.")
+        self.assertEqual(self.st.session_state["msg"][0] if self.st.session_state["msg"] else "info", "info")
+        self.assertIn("Recuperei", " ".join(str(c[1][0]) for c in self.st.chamadas if c[0] == "info"))
+        # e a revisão recuperada ainda pode ser salva
+        self.st.cliques = {"Salvar marcados como confirmados"}
+        self.rodar()
+        self.assertIn("Usa Notion para documentar.", [f.texto for f in self.kb.fatos("confirmado")])
+        # depois de salvar não sobra nada para recuperar
+        self.assertFalse((self.kb.base / ".sessao" / "sessao.json").exists())
+
+    def test_importacao_nao_salva_sobrevive_a_reiniciar(self):
+        imp = {"propostas": [{"destino": "habilidades", "meta": {},
+                              "fatos": [{"texto": "Domina Excel avançado.", "origem": "dito"}]}]}
+        self.usar_llm(imp)
+        cv = "Ana Souza\nAnalista\n" + "Trabalhou com análise de dados e relatórios. " * 5
+        self.st.uploads["up_curriculo"] = stub.ArquivoFalso("cv.txt", cv.encode("utf-8"))
+        self.st.cliques = {"btn_importar"}
+        self.rodar()
+        self.reiniciar()
+        self.rodar()
+        self.assertEqual(self.st.session_state["rev_importacao"][0].fatos[0].texto, "Domina Excel avançado.")
+
+    def test_conversa_nova_apaga_so_a_conversa(self):
+        self.usar_llm("ok", {"propostas": [{"destino": "habilidades", "meta": {},
+                                            "fatos": [{"texto": "Fato novo.", "origem": "dito"}]}]})
+        self.st.chat = ["oi"]
+        self.rodar()
+        self.st.cliques = {"btn_encerrar"}
+        self.rodar()
+        self.st.cliques = {"btn_nova_conversa"}
+        self.rodar()
+        self.assertEqual(self.st.session_state["chat"], [])
+        self.assertTrue(self.st.session_state["rev_entrevista"])      # a revisão fica
+        self.reiniciar()
+        self.rodar()
+        self.assertEqual(self.st.session_state["chat"], [])
+        self.assertTrue(self.st.session_state["rev_entrevista"])
+
+    def test_aba_base_mostra_o_registro_quando_ha_chamadas(self):
+        from src import config
+        logs = self.tmp / "saidas" / "logs"
+        logs.mkdir(parents=True)
+        (logs / "2026-10-12.jsonl").write_text(
+            json.dumps({"quando": "2026-10-12T10:00:00", "rotulo": "gerador", "duracao_s": 3.2, "erro": None},
+                       ensure_ascii=False) + chr(10), encoding="utf-8")
+        with mock.patch.object(config, "saidas_dir", lambda: self.tmp / "saidas"):
+            self.rodar()
+        self.assertIn("gerador", self.textos("write"))
+        nomes = [c[1][0] for c in self.st.chamadas if c[0] == "download_button"]
+        self.assertTrue(any("Baixar o registro" in n for n in nomes))
 
     def test_aba_base_acoes(self):
         self.st.valores["ed_arquivo"] = "perfil"

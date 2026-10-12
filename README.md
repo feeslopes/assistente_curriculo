@@ -23,6 +23,7 @@ A regra central do projeto, imposta por código e não só pedida à IA:
 | Nome, telefone, e-mail, links e endereço (arquivo `base/contato.yaml`) | O que você escreve no chat |
 | A sua base de fatos (pasta `base/`) | Os fatos confirmados que o aplicativo usa para analisar e gerar |
 | Os currículos gerados (pasta `saidas/`) | O texto da vaga e do currículo importado |
+| A conversa em andamento (`base/.sessao/`) e o registro das chamadas à IA (`saidas/logs/`, sem contato) | |
 | A sua chave de API (arquivo `.env`) | |
 
 Antes de qualquer envio, o aplicativo **mascara e-mails, telefones e links** e remove do texto os valores do seu cadastro de contato (incluindo o seu nome). O cabeçalho do currículo é montado localmente, depois da geração. Mesmo assim, **não digite telefone, endereço ou documentos no chat.**
@@ -122,8 +123,8 @@ Só `[confirmado]` chega à IA e ao currículo. `[sugerido]` fica guardado até 
 
 ### 1. Entrevista
 
-1. *(Opcional)* Em **Importar um currículo existente**, envie o seu currículo atual (PDF, DOCX, MD ou TXT). Isso acelera a entrevista. Seu telefone, e-mail e LinkedIn são lidos no seu computador e vão para a aba Minha base, sem passar pela IA.
-2. **Converse.** O entrevistador faz uma pergunta por vez, da experiência mais recente para a mais antiga. Ele pede exemplos e números. Se você só tem uma estimativa, diga que é estimativa.
+1. *(Opcional, mas recomendado)* Em **Importar um currículo existente**, envie o seu currículo atual (PDF, DOCX, MD ou TXT). Seu telefone, e-mail e LinkedIn são lidos no seu computador e vão para a aba Minha base, sem passar pela IA. Os fatos do currículo aparecem numa **revisão própria**: marque o que é verdade e clique em **Salvar**. **Enquanto você não salvar, nada do currículo está na sua base**, e a análise de vagas vai apontar como lacuna coisas que você tem.
+2. **Converse.** Com a base já preenchida, o entrevistador não repete o que já está nela: ele só pergunta o que falta (números, resultados, escopo, seções vazias). Uma pergunta por vez. Se você só tem uma estimativa, diga que é estimativa. Depois de umas 8 respostas, o aplicativo sugere encerrar a rodada. Dá para fazer outra rodada depois.
 3. Clique em **Encerrar rodada e revisar.** Você verá a lista de fatos que a IA entendeu.
    - Fatos que **você disse** vêm marcados.
    - Fatos que **a IA inferiu** vêm desmarcados. Marque só se for verdade.
@@ -180,7 +181,7 @@ C4Container
     Container(logica, "Lógica e regras", "Python, pasta src", "Entrevista, análise da vaga, geração, verificações e exportação")
     Container(regras, "Prompts e regras de escrita", "Markdown e YAML", "Pasta prompts, guidelines.md e config.yaml. Você pode editar")
     ContainerDb(base, "Base de conhecimento", "Arquivos Markdown e YAML, pasta base", "Fatos confirmados e pendentes, e o contato")
-    ContainerDb(saidas, "Currículos gerados", "PDF, DOCX e MD, pasta saidas", "Um subdiretório por vaga")
+    ContainerDb(saidas, "Currículos e registro", "PDF, DOCX, MD e JSONL, pasta saidas", "Um subdiretório por vaga e o registro das chamadas à IA")
   }
   System_Ext(ia, "Provedor de IA", "API compatível com OpenAI")
   Rel(voce, web, "Usa no navegador")
@@ -466,10 +467,14 @@ A IA fiscal é uma segunda chamada ao modelo. Ela reduz o risco, mas **não é p
 | "O modelo não existe nesse provedor" | Rode `python verificar.py --modelos` e use um nome da lista em `MODELO=`. |
 | "Limite de uso do provedor atingido" | No plano gratuito o limite por minuto é baixo. O aplicativo já tenta de novo sozinho. Espere cerca de um minuto. |
 | "Resposta vazia" ou "JSON inválido" | O modelo é fraco demais ou gastou tudo pensando. Tente de novo ou troque de modelo. |
+| A análise diz que eu não tenho algo que eu tenho | A análise só enxerga fatos **confirmados**. Confira se você salvou a revisão do currículo importado (aba Entrevista), se há fatos pendentes (aba Minha base) e se a base tem as experiências, a formação e as habilidades. O aplicativo mostra esses avisos no topo da aba da vaga. |
+| O entrevistador pergunta o que já está no meu currículo | Quase sempre é porque a revisão do currículo importado não foi salva. Salve, e a conversa passa a perguntar só o que falta. |
 | "A verificação por IA não rodou" | O currículo saiu sem o segundo passo de conferência. Leia com mais atenção, ou gere de novo. |
 | O PDF importado "não tem texto" | É um PDF escaneado (imagem). Envie uma versão em texto ou use DOCX. |
 | O PDF passou do limite de páginas | Corte conteúdo editando, ou mude `max_paginas` e `bullets_por_experiencia` no `config.yaml`. |
 | A porta 8501 está ocupada | Feche a janela preta de uma execução anterior e abra de novo. |
+| Fechei o aplicativo no meio da conversa | Abra de novo. A conversa e as revisões não salvas voltam sozinhas, com um aviso no topo. Para recomeçar do zero, use **Começar uma conversa nova**. |
+| Quero ver o que a IA recebeu e respondeu | Aba **Minha base**, item **Registro das interações com a IA**, ou a pasta `saidas/logs`. |
 | Quero fazer backup | Copie a pasta `base/`. É tudo o que importa. |
 | Quero mudar o jeito que o currículo é escrito | Edite o `guidelines.md` (tom, verbos, estilo) ou o `config.yaml` (limites, ordem e nome das seções). |
 
@@ -511,7 +516,9 @@ Se você guardar currículos reais na pasta `exemplo/` para testar, eles ficam f
 
 O `.gitattributes` garante fim de linha LF no `iniciar.sh` e CRLF no `iniciar.bat`. Para o `iniciar.sh` ser executável direto no Linux depois de clonar: `chmod +x iniciar.sh` (ou use `bash iniciar.sh`).
 
-Para depurar, defina `CV_DEBUG=1` antes de rodar: o aplicativo grava em `saidas/debug.log` exatamente o que é enviado ao provedor, para você conferir que não há contato. **Esse arquivo contém o conteúdo da sua base, apague depois.**
+Cada chamada à IA é registrada em `saidas/logs/AAAA-MM-DD.jsonl`, uma linha por chamada, com `rotulo` (entrevistador, extrator, analisador, gerador, verificador, tradutor_cargos), modelo, duração, o que foi enviado **já mascarado** (sem telefone, e-mail, links nem os dados do contato), a resposta recebida e o erro, se houve. Serve para depurar e para melhorar os prompts: abra o arquivo, ache a chamada que deu errado e veja exatamente o que o modelo recebeu e respondeu. A aba **Minha base** mostra as últimas chamadas e permite baixar o registro do dia. A chave de API nunca é gravada. Para desligar, coloque `CV_LOG=0` no `.env`. **O registro contém o conteúdo da sua base e das suas conversas: apague a pasta `saidas/logs` antes de compartilhar o computador.**
+
+A conversa em andamento e as revisões de fatos ainda não salvas ficam em `base/.sessao/sessao.json` e voltam quando o aplicativo abre de novo. O arquivo some quando não há mais nada pendente.
 
 ---
 

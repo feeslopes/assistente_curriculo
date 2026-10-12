@@ -182,10 +182,10 @@ class TestTraducao(unittest.TestCase):
         from src.llm import ErroLLM
 
         class Quebra(LLMFalso):
-            def conversar(self, mensagens, json_mode=False, temperatura=0.3):
+            def conversar(self, mensagens, json_mode=False, temperatura=0.3, rotulo=""):
                 if self.chamadas:
                     raise ErroLLM("limite")
-                return super().conversar(mensagens, json_mode, temperatura)
+                return super().conversar(mensagens, json_mode, temperatura, rotulo)
 
         llm = Quebra(self._gerado_com_termo_traduzido())
         analise = tailor.validar_analise({"palavras_chave": [], "requisitos": []}, self.kb.ids_confirmados())
@@ -201,10 +201,10 @@ class TestTraducao(unittest.TestCase):
         from src.llm import ErroLLM
 
         class Quebra(LLMFalso):
-            def conversar(self, mensagens, json_mode=False, temperatura=0.3):
+            def conversar(self, mensagens, json_mode=False, temperatura=0.3, rotulo=""):
                 if len(self.chamadas) >= 1:
                     raise ErroLLM("limite")
-                return super().conversar(mensagens, json_mode, temperatura)
+                return super().conversar(mensagens, json_mode, temperatura, rotulo)
 
         llm = Quebra(gerado_en(self.s1, self.s2))
         analise = tailor.validar_analise({"palavras_chave": [], "requisitos": []}, self.kb.ids_confirmados())

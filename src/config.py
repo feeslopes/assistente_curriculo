@@ -51,6 +51,11 @@ def saidas_dir() -> Path:
     return RAIZ / "saidas"
 
 
+def logs_dir() -> Path:
+    """Registro das interações com a IA. Fica dentro de saidas/, que o Git ignora."""
+    return saidas_dir() / "logs"
+
+
 def carregar_config(caminho: Path | None = None) -> dict:
     """config.yaml sobre os padrões. Lido a cada chamada, de propósito."""
     caminho = caminho or RAIZ / "config.yaml"

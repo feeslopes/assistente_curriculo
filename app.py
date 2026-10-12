@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from src import config, exemplo, export, interview, saidas, tailor
+from src import config, exemplo, export, interview, registro, saidas, sessao, tailor
 from src.kb import ARQUIVOS_FATOS, KB, ErroBase
 from src.llm import LLM, Configuracao, ErroConfig, ErroLLM
 from src.texto import extrair_contato_local, ler_arquivo, palpite_nome
@@ -26,12 +26,34 @@ ROTULO_STATUS = {"coberto": "coberto", "parcial": "parcial", "lacuna": "lacuna"}
 # ------------------------------------------------------------------ infraestrutura
 
 def estado_inicial() -> None:
-    for chave, valor in (("chat", []), ("rev_id", 0), ("rev_entrevista", None), ("analise_id", 0),
+    for chave, valor in (("chat", []), ("rev_id", 0), ("rev_entrevista", None), ("rev_importacao", None), ("analise_id", 0),
                          ("analise", None), ("vaga_analisada", ""), ("rev_lacuna", None), ("gen_id", 0),
                          ("resultado", None), ("trad", None), ("trad_id", 0), ("base_v", 0),
                          ("msg", None)):
         if chave not in st.session_state:
             st.session_state[chave] = valor
+    # Uma vez por sessão do navegador: recupera a conversa e as revisões que estavam salvas em disco.
+    if not st.session_state.get("_sessao_carregada"):
+        st.session_state["_sessao_carregada"] = True
+        salvo = sessao.carregar(config.base_dir())
+        if salvo["chat"] or salvo["rev_importacao"] or salvo["rev_entrevista"]:
+            st.session_state["chat"] = salvo["chat"]
+            st.session_state["rev_importacao"] = salvo["rev_importacao"] or None
+            st.session_state["rev_entrevista"] = salvo["rev_entrevista"] or None
+            st.session_state["rev_id"] += 1
+            partes = []
+            if salvo["chat"]:
+                partes.append(f"a conversa ({sum(1 for m in salvo['chat'] if m['role'] == 'user')} resposta(s) sua(s))")
+            if salvo["rev_importacao"] or salvo["rev_entrevista"]:
+                partes.append("revisões de fatos que ainda não foram salvas na base")
+            st.session_state["msg"] = ("info", "Recuperei o que estava salvo: " + " e ".join(partes) + ".")
+
+
+def persistir(kb: KB) -> None:
+    """Grava a conversa e as revisões pendentes. Roda a cada execução, inclusive antes de um st.rerun()."""
+    s = st.session_state
+    if s.get("_sessao_carregada"):
+        sessao.salvar(kb.base, s.get("chat") or [], s.get("rev_importacao"), s.get("rev_entrevista"))
 
 
 def configuracao_do_provedor():
@@ -47,7 +69,7 @@ def obter_llm(kb: KB) -> LLM:
     cfg, erro = configuracao_do_provedor()
     if erro:
         raise ErroConfig(erro)
-    return LLM(cfg, segredos=kb.segredos())
+    return LLM(cfg, segredos=kb.segredos(), log_dir=config.logs_dir() if registro.ativo() else None)
 
 
 def executar(rotulo: str, funcao, *args):
@@ -173,11 +195,23 @@ def importar_curriculo(kb: KB, arquivo) -> None:
     if props is FALHOU:
         return
     st.session_state["rev_id"] += 1
-    st.session_state["rev_entrevista"] = props
+    st.session_state["rev_importacao"] = props
     avisar("info" if props else "warning",
-           ("Currículo lido. Contato preenchido na aba Minha base. Revise os fatos abaixo."
+           ("Currículo lido. Contato preenchido na aba Minha base. Revise e salve os fatos abaixo antes de conversar."
             if props else "Não encontrei fatos novos nesse currículo."))
     st.rerun()
+
+
+LIMITE_RESPOSTAS_SUGERIDO = 8  # depois disso o app sugere encerrar a rodada
+
+
+def textos_aguardando_revisao() -> list[str]:
+    """Fatos que a pessoa ainda não revisou. O entrevistador os trata como já informados."""
+    textos: list[str] = []
+    for chave in ("rev_importacao", "rev_entrevista"):
+        for p in st.session_state.get(chave) or []:
+            textos += [f.texto for f in p.fatos]
+    return textos
 
 
 def aba_entrevista(kb: KB, config_erro: str | None) -> None:
@@ -191,9 +225,26 @@ def aba_entrevista(kb: KB, config_erro: str | None) -> None:
         if st.button("Ler este currículo", key="btn_importar", disabled=arq is None):
             importar_curriculo(kb, arq)
 
+    # Revisão do currículo importado: espaço próprio, que a conversa nunca substitui.
+    importados = st.session_state["rev_importacao"]
+    if importados:
+        st.markdown("#### Revisão do currículo importado")
+        st.warning("Salve esta revisão antes de seguir. Enquanto ela não for salva, nada do currículo está na sua base "
+                   "e a análise de vagas não enxerga esses fatos.")
+        r = formulario_revisao("imp", importados, st.session_state["rev_id"], kb)
+        if r:
+            st.session_state["rev_importacao"] = None
+            avisar("success", resumo_salvamento(r) + " A conversa agora só aprofunda o que falta.")
+            st.rerun()
+        if st.button("Descartar esta revisão", key="btn_descartar_imp"):
+            st.session_state["rev_importacao"] = None
+            st.rerun()
+
     st.markdown("#### Conversa")
+    if st.session_state["rev_entrevista"] and not importados:
+        st.warning("Há fatos da última rodada aguardando a sua revisão, logo abaixo da conversa.")
     with st.chat_message("assistant"):
-        st.write(interview.ABERTURA)
+        st.write(interview.abertura(kb))
     for m in st.session_state["chat"]:
         with st.chat_message(m["role"]):
             st.write(m["content"])
@@ -204,14 +255,19 @@ def aba_entrevista(kb: KB, config_erro: str | None) -> None:
         except ErroConfig as e:
             st.error(str(e))
             return
-        resposta = executar("Pensando...", interview.responder, llm, kb, st.session_state["chat"], texto)
+        resposta = executar("Pensando...", interview.responder, llm, kb, st.session_state["chat"], texto,
+                            textos_aguardando_revisao())
         if resposta is not FALHOU:
             st.session_state["chat"] += [{"role": "user", "content": texto},
                                          {"role": "assistant", "content": resposta}]
             st.rerun()
 
-    tem_conversa = any(m["role"] == "user" for m in st.session_state["chat"])
-    if st.button("Encerrar rodada e revisar", key="btn_encerrar", disabled=not tem_conversa):
+    respostas = sum(1 for m in st.session_state["chat"] if m["role"] == "user")
+    if respostas >= LIMITE_RESPOSTAS_SUGERIDO:
+        st.info(f"Você já respondeu {respostas} perguntas. É um bom momento para clicar em **Encerrar rodada e "
+                "revisar**: o que você confirmar fica salvo e uma nova rodada não repete as perguntas.")
+    revisao_pendente = bool(st.session_state["rev_entrevista"])
+    if st.button("Encerrar rodada e revisar", key="btn_encerrar", disabled=respostas == 0 or revisao_pendente):
         props = executar("Extraindo os fatos da conversa...", interview.extrair_da_conversa, obter_llm(kb), kb,
                          st.session_state["chat"])
         if props is not FALHOU:
@@ -220,15 +276,24 @@ def aba_entrevista(kb: KB, config_erro: str | None) -> None:
             if not props:
                 avisar("warning", "Não encontrei fatos novos nessa conversa.")
             st.rerun()
+    if revisao_pendente:
+        st.caption("Salve ou descarte a revisão abaixo antes de encerrar outra rodada.")
+    if respostas and st.button("Começar uma conversa nova", key="btn_nova_conversa"):
+        # a conversa fica salva em disco até aqui; revisões pendentes não são afetadas
+        st.session_state["chat"] = []
+        st.rerun()
 
     props = st.session_state["rev_entrevista"]
     if props:
-        st.markdown("#### Revisão")
+        st.markdown("#### Revisão da conversa")
         r = formulario_revisao("ent", props, st.session_state["rev_id"], kb)
         if r:
             st.session_state["rev_entrevista"] = None
             st.session_state["chat"] = []
             avisar("success", resumo_salvamento(r) + " A conversa foi reiniciada; o que já está na base não será perguntado de novo.")
+            st.rerun()
+        if st.button("Descartar esta revisão", key="btn_descartar_ent"):
+            st.session_state["rev_entrevista"] = None
             st.rerun()
 
 
@@ -427,6 +492,11 @@ def aba_vaga(kb: KB, config_erro: str | None, cfg: dict) -> None:
         st.info("A sua base ainda não tem fatos confirmados. Faça a entrevista, importe um currículo ou use os dados de "
                 "exemplo na barra lateral.")
         return
+    # A análise só enxerga fatos CONFIRMADOS. Avisar antes evita culpar a vaga por uma base incompleta.
+    if st.session_state["rev_importacao"] or st.session_state["rev_entrevista"]:
+        st.warning("Há fatos aguardando a sua revisão na aba Entrevista. Enquanto não forem salvos, a análise não os vê.")
+    for aviso in kb.diagnostico():
+        st.warning(aviso)
     vaga = texto_da_vaga()
     if st.button("Analisar vaga", key="btn_analisar", disabled=not vaga):
         analisar_vaga(kb, vaga)
@@ -529,16 +599,37 @@ def aba_base(kb: KB) -> None:
     secao_pendentes(kb)
     secao_editor(kb)
     secao_nova_experiencia(kb)
+    secao_registro()
+
+
+def secao_registro() -> None:
+    """Registro das chamadas à IA, para depurar e melhorar os prompts."""
+    with st.expander("Registro das interações com a IA (para depuração)"):
+        if not registro.ativo():
+            st.caption("O registro está desligado (CV_LOG=0 no arquivo .env).")
+            return
+        st.caption(f"Cada chamada à IA fica salva em {registro.pasta()}, um arquivo por dia. O registro guarda o que "
+                   "foi enviado (já sem telefone, e-mail e links) e a resposta recebida. Ele contém o conteúdo da sua "
+                   "base e das suas conversas: apague a pasta antes de compartilhar o computador ou o projeto.")
+        recentes = registro.ultimos(8)
+        if not recentes:
+            st.caption("Ainda não há chamadas registradas.")
+            return
+        for r in recentes:
+            st.write("- " + registro.resumo(r))
+        arqs = registro.arquivos()
+        st.download_button(f"Baixar o registro de {arqs[0].stem}", arqs[0].read_bytes(), file_name=arqs[0].name,
+                           mime="application/x-ndjson", key="dl_registro")
 
 
 # ---------------------------------------------------------------------- barra lateral
 
 def barra_lateral(kb: KB, cfg_provedor, config_erro: str | None) -> None:
+    """Barra lateral compacta. Fica recolhida e só abre sozinha se faltar a configuração."""
     with st.sidebar:
-        st.header("Configuração")
+        st.subheader("Configuração")
         if cfg_provedor:
-            st.write(f"Provedor: **{cfg_provedor.nome_provedor}**")
-            st.write(f"Modelo: `{cfg_provedor.modelo}`")
+            st.caption(f"{cfg_provedor.nome_provedor} · {cfg_provedor.modelo}")
             if st.button("Testar conexão", key="btn_testar"):
                 r = executar("Testando...", lambda: obter_llm(kb).conversar(
                     [{"role": "user", "content": "Responda somente com a palavra OK."}], temperatura=0))
@@ -546,10 +637,11 @@ def barra_lateral(kb: KB, cfg_provedor, config_erro: str | None) -> None:
                     st.success("Conexão funcionando.")
         else:
             st.warning(config_erro)
-        st.caption(f"Pasta de saída dos currículos: {config.saidas_dir()}")
-        st.caption(f"Pasta da base: {kb.base}")
-        with st.expander("Testar com dados de exemplo"):
-            st.caption("Copia uma base fictícia para a sua base, só se ela estiver vazia.")
+        with st.expander("Pastas"):
+            st.caption(f"Base: {kb.base}")
+            st.caption(f"Currículos gerados: {config.saidas_dir()}")
+        with st.expander("Dados de exemplo"):
+            st.caption("Copia uma base fictícia, só se a sua estiver vazia.")
             if st.button("Copiar dados de exemplo", key="btn_exemplo"):
                 if exemplo.copiar_exemplo(kb):
                     st.session_state["base_v"] += 1
@@ -562,22 +654,28 @@ def barra_lateral(kb: KB, cfg_provedor, config_erro: str | None) -> None:
 # ------------------------------------------------------------------------------ main
 
 def main() -> None:
-    st.set_page_config(page_title="Currículo sob medida", layout="wide")
+    cfg_provedor, config_erro = configuracao_do_provedor()
+    # recolhida por padrão; abre sozinha só quando falta configurar o provedor
+    st.set_page_config(page_title="Currículo sob medida", layout="wide",
+                       initial_sidebar_state="expanded" if config_erro else "collapsed")
     estado_inicial()
     kb = KB(config.base_dir())
     cfg = config.carregar_config()
-    cfg_provedor, config_erro = configuracao_do_provedor()
-    barra_lateral(kb, cfg_provedor, config_erro)
-    st.title("Currículo sob medida")
-    st.caption("Nada entra no currículo sem um fato que você confirmou. A IA propõe, você decide.")
-    mostrar_mensagem()
-    aba1, aba2, aba3 = st.tabs(["1. Entrevista", "2. Currículo para uma vaga", "3. Minha base"])
-    with aba1:
-        aba_entrevista(kb, config_erro)
-    with aba2:
-        aba_vaga(kb, config_erro, cfg)
-    with aba3:
-        aba_base(kb)
+    try:
+        barra_lateral(kb, cfg_provedor, config_erro)
+        st.title("Currículo sob medida")
+        st.caption("Nada entra no currículo sem um fato que você confirmou. A IA propõe, você decide.")
+        mostrar_mensagem()
+        aba1, aba2, aba3 = st.tabs(["1. Entrevista", "2. Currículo para uma vaga", "3. Minha base"])
+        with aba1:
+            aba_entrevista(kb, config_erro)
+        with aba2:
+            aba_vaga(kb, config_erro, cfg)
+        with aba3:
+            aba_base(kb)
+    finally:
+        # o finally também roda quando st.rerun() interrompe o script: nada digitado se perde
+        persistir(kb)
 
 
 if __name__ == "__main__":

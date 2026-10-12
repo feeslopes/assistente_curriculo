@@ -12,7 +12,8 @@ def copiar_exemplo(kb: KB) -> bool:
     origem = config.RAIZ / "exemplo" / "base"
     if not origem.exists():
         return False
-    if kb.base.exists() and any(p.name != ".gitkeep" for p in kb.base.iterdir()):
+    # arquivos ocultos (.gitkeep, .sessao com a conversa salva) não contam como "base com dados"
+    if kb.base.exists() and any(not p.name.startswith(".") for p in kb.base.iterdir()):
         return False
     shutil.copytree(origem, kb.base, dirs_exist_ok=True)
     return True

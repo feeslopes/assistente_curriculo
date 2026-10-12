@@ -113,3 +113,40 @@ class TestKB(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestLacunas(unittest.TestCase):
+    def setUp(self):
+        self.kb, self.tmp = base_exemplo()
+
+    def tearDown(self):
+        limpar(self.tmp)
+
+    def test_base_de_exemplo_so_falta_resultado_medido_nas_experiencias_sem_numero(self):
+        tipos = {(l["tipo"], l["slug"] or l["rotulo"]) for l in self.kb.lacunas()}
+        self.assertNotIn(("secao_vazia", "formacao"), tipos)
+        # estagiária tem 2 fatos: poucos detalhes
+        self.assertIn(("poucos_fatos", "loja-modelo-estagiaria-de-marketing"), tipos)
+
+    def test_secoes_vazias_e_base_vazia(self):
+        from src.kb import KB
+        vazia = KB(self.tmp / "vazia")
+        tipos = [l["tipo"] for l in vazia.lacunas()]
+        self.assertIn("sem_experiencias", tipos)
+        self.assertEqual(tipos.count("secao_vazia"), 4)
+
+    def test_diagnostico_aponta_pendentes_e_secoes_vazias(self):
+        self.assertTrue(any("pendente" in a for a in self.kb.diagnostico()))
+        import os
+        os.remove(self.kb.base / "formacao.md")
+        self.assertTrue(any("formação" in a for a in self.kb.diagnostico()))
+
+    def test_base_incompleta_de_importacao_perdida_e_detectada(self):
+        """O caso do usuário: só duas experiências e nada de formação, habilidades, idiomas ou perfil."""
+        from src.kb import KB
+        kb = KB(self.tmp / "parcial")
+        s1 = kb.criar_experiencia({"empresa": "A", "cargo": "X", "inicio": "2020-01", "fim": "atual"})
+        kb.adicionar_fatos(s1, ["Fez algo com 10 pessoas.", "Fez outra coisa.", "E mais uma."])
+        av = " ".join(kb.diagnostico())
+        self.assertIn("formação", av)
+        self.assertIn("menos de duas experiências", av)
