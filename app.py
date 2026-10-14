@@ -10,7 +10,7 @@ import streamlit as st
 from src import config, exemplo, export, interview, registro, saidas, sessao, tailor
 from src.kb import ARQUIVOS_FATOS, KB, ErroBase
 from src.llm import LLM, Configuracao, ErroConfig, ErroLLM
-from src.texto import extrair_contato_local, ler_arquivo, palpite_nome
+from src.texto import detectar_idioma, extrair_contato_local, ler_arquivo, palpite_nome
 
 FALHOU = object()  # sentinela: a ação deu erro e a mensagem já foi mostrada
 TIPOS_ARQUIVO = ["pdf", "docx", "md", "txt"]
@@ -196,9 +196,16 @@ def importar_curriculo(kb: KB, arquivo) -> None:
         return
     st.session_state["rev_id"] += 1
     st.session_state["rev_importacao"] = props
-    avisar("info" if props else "warning",
-           ("Currículo lido. Contato preenchido na aba Minha base. Revise e salve os fatos abaixo antes de conversar."
-            if props else "Não encontrei fatos novos nesse currículo."))
+    idioma_cv, idioma_base = detectar_idioma(texto), kb.idioma_base()
+    if props and kb.fatos() and idioma_cv and idioma_cv != idioma_base:
+        nomes = {"pt": "português", "en": "inglês"}
+        avisar("warning", f"Atenção: a sua base está em {nomes[idioma_base]} e este currículo parece estar em "
+                          f"{nomes[idioma_cv]}. Se for o mesmo currículo traduzido, **descarte esta revisão**: importar "
+                          "os dois duplica experiências e fatos. O aplicativo já traduz para o idioma da vaga na hora de gerar.")
+    else:
+        avisar("info" if props else "warning",
+               ("Currículo lido. Contato preenchido na aba Minha base. Revise e salve os fatos abaixo antes de conversar."
+                if props else "Não encontrei fatos novos nesse currículo."))
     st.rerun()
 
 
@@ -221,6 +228,9 @@ def aba_entrevista(kb: KB, config_erro: str | None) -> None:
         tela_configuracao(config_erro)
         return
     with st.expander("Importar um currículo existente (opcional, acelera a entrevista)"):
+        st.caption("Importe **um** currículo, em **um** idioma só. O aplicativo traduz para o idioma da vaga na hora de "
+                   "gerar, então um segundo currículo em outro idioma não acrescenta nada e criaria experiências e fatos "
+                   "duplicados. Depois de ler, revise e clique em Salvar.")
         arq = st.file_uploader("Currículo em PDF, DOCX, MD ou TXT", type=TIPOS_ARQUIVO, key="up_curriculo")
         if st.button("Ler este currículo", key="btn_importar", disabled=arq is None):
             importar_curriculo(kb, arq)
@@ -426,9 +436,19 @@ def secao_geracao(kb: KB, cfg: dict) -> None:
                            key=f"titulo_{aid}")
     if secao_traducao(kb, idioma):
         st.info("Confirme as traduções acima antes de gerar, ou gere assim mesmo: os cargos sem tradução ficam no idioma original.")
+    # Espaço de cada experiência: o app decide pela data e pela relevância na vaga; você corrige se quiser.
+    detalhe = tailor.limites_por_experiencia(kb, cfg, analise)
+    manuais: dict[str, int] = {}
+    with st.expander("Espaço de cada experiência (o app já ajustou pela data e pela vaga)"):
+        st.caption("As experiências recentes e as mais relevantes para esta vaga ganham mais bullets. As antigas e pouco "
+                   "relevantes ficam resumidas. Ajuste se quiser: 0 mostra só cargo, empresa e datas.")
+        for e in kb.experiencias():
+            d = detalhe[e.slug]
+            manuais[e.slug] = int(st.number_input(f"{d['rotulo']}: {d['motivo']}", min_value=0, max_value=8,
+                                                  value=int(d["limite"]), step=1, key=f"lim_{aid}_{e.slug}"))
     if st.button("Gerar currículo", key="btn_gerar", type="primary"):
         res = executar("Gerando e verificando o currículo (pode levar um minuto)...", tailor.gerar, obter_llm(kb), kb,
-                       vaga, analise, idioma, cfg, titulo or None)
+                       vaga, analise, idioma, cfg, titulo or None, True, manuais)
         if res is not FALHOU:
             st.session_state["gen_id"] += 1
             st.session_state["resultado"] = res
@@ -458,6 +478,10 @@ def secao_resultado(cfg: dict) -> None:
             for r in cv.removidos:
                 st.write(f"- {r['secao']}: {r['texto']}  ({r['motivo']})")
     mostrar_cobertura(res.cobertura)
+    if res.limites:
+        with st.expander("Como o espaço de cada experiência foi decidido"):
+            for v in res.limites.values():
+                st.write(f"- {v.get('rotulo', '')}: {v['limite']} bullet(s), {v['motivo']}")
     with st.expander("Rastro: de qual fato veio cada item"):
         for r in cv.rastro:
             st.write(f"- {r['texto']}  →  {', '.join(r['fontes_validas']) or 'sem fonte válida'}")

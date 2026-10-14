@@ -41,7 +41,9 @@ Devolva somente um JSON, sem texto antes ou depois, e escreva todo o conteúdo n
 - `experiencias`: uma entrada por experiência da base, com o `id` (slug) exatamente como fornecido, da mais
   recente para a mais antiga. NÃO escreva empresa, cargo, datas nem local: o sistema monta isso. Escreva
   só os bullets, os mais ligados à vaga primeiro, respeitando o máximo informado por experiência.
-  Inclua todas as experiências, mesmo as menos relevantes, com ao menos um bullet.
+  Inclua uma entrada para cada experiência. O foco do currículo está nas experiências recentes e nas mais
+  relevantes para a vaga: as antigas ou pouco relevantes recebem poucos bullets, curtos e densos, ou nenhum se o
+  limite for 0 (`bullets: []`).
 - Palavras-chave da análise que a base sustenta (um fato confirmado traz o termo ou o descreve) devem aparecer
   no currículo, em bullet ou competência. Se o limite de bullets obriga a escolher, prefira o fato que contém
   uma palavra-chave exigida pela vaga.

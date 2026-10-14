@@ -105,6 +105,9 @@ class FakeStreamlit:
     def radio(self, rotulo, opcoes, index=0, key=None, **k):
         return self._valor(key, opcoes[index])
 
+    def number_input(self, rotulo, min_value=None, max_value=None, value=0, step=1, key=None, **k):
+        return self._valor(key, value)
+
     def selectbox(self, rotulo, opcoes, index=0, key=None, **k):
         return self._valor(key, opcoes[index])
 

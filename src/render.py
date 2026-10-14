@@ -67,8 +67,10 @@ def _cortar_resumo(texto: str, max_palavras: int) -> str | None:
 
 
 class _Montador:
-    def __init__(self, kb: KB, idioma: str, cfg: dict, veredito: dict | None = None, fiscal: str = "ausente"):
+    def __init__(self, kb: KB, idioma: str, cfg: dict, veredito: dict | None = None, fiscal: str = "ausente",
+                 limites: dict | None = None):
         self.kb, self.idioma, self.cfg = kb, idioma, cfg
+        self.limites = limites or {}   # slug -> máximo de bullets (0 = só cabeçalho); vazio = regra por posição
         self.fiscal = fiscal
         self.veredito = veredito or {}
         self.ids_ok = kb.ids_confirmados()
@@ -274,7 +276,11 @@ class _Montador:
             self.alertas.append(f"A IA citou uma experiência que não existe na base ('{desconhecido}'). Ignorada.")
         blocos: list[tuple[dict, list[str]]] = []
         for pos, e in enumerate(exps):
-            lim = _limite_bullets(self.cfg, pos)
+            lim = self.limites[e.slug] if e.slug in self.limites else _limite_bullets(self.cfg, pos)
+            if lim <= 0:
+                # experiência antiga e resumida ao máximo: só cargo, empresa e datas. Não é buraco no histórico.
+                blocos.append((e.meta, []))
+                continue
             bullets = []
             brutos = (modelo.get(e.slug) or {}).get("bullets") or []
             for b in brutos:
@@ -285,7 +291,7 @@ class _Montador:
                     bullets.append(t)
             if len(bullets) > lim:
                 self.alertas.append(f"{len(bullets) - lim} bullet(s) de {e.meta['empresa']} cortado(s): "
-                                    f"limite de {lim} para esta posição.")
+                                    f"limite de {lim} para esta experiência.")
                 bullets = bullets[:lim]
             if not bullets:
                 self.alertas.append(f"A experiência em {e.meta['empresa']} ({e.meta['cargo']}) ficou de fora do "
@@ -319,13 +325,14 @@ class _Montador:
             partes = [cargo, f"{ini}{sep}{fim}"] + ([local] if local else [])
             if saida and saida[-1] != "":
                 saida.append("")
-            saida += ["_" + " · ".join(partes) + "_", ""]
-            saida += [f"* {b}" for b in bullets]
+            saida += ["_" + " · ".join(partes) + "_"]
+            if bullets:
+                saida += [""] + [f"* {b}" for b in bullets]
         return saida
 
 
 def montar(kb: KB, gerado, idioma: str, cfg: dict, titulo_usuario: str | None = None,
-           veredito: dict | None = None, fiscal: str = "ausente") -> Curriculo:
+           veredito: dict | None = None, fiscal: str = "ausente", limites: dict | None = None) -> Curriculo:
     """Monta o currículo. `gerado` é o JSON do gerador, já parseado (qualquer lixo é tolerado).
 
     `veredito` (opcional): {"secao|texto": "problema"} vindo do fiscal por IA.
@@ -334,7 +341,7 @@ def montar(kb: KB, gerado, idioma: str, cfg: dict, titulo_usuario: str | None = 
     if idioma not in ("pt", "en"):
         raise ValueError("Idioma precisa ser 'pt' ou 'en'.")
     g = gerado if isinstance(gerado, dict) else {}
-    m = _Montador(kb, idioma, cfg, veredito, fiscal)
+    m = _Montador(kb, idioma, cfg, veredito, fiscal, limites)
     titulo = m.titulo(g.get("titulo"), titulo_usuario)
 
     secoes: dict[str, list[str]] = {

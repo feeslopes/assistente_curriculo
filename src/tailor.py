@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import date
 
 from . import config, interview, render
 from .kb import KB, ErroBase
@@ -20,6 +21,7 @@ class Resultado:
     cobertura: dict
     gerado_bruto: dict
     verificacao_ia: bool = False
+    limites: dict = field(default_factory=dict)   # slug -> {limite, motivo}
 
 
 # ------------------------------------------------------------------------ análise
@@ -104,14 +106,73 @@ def recomendar_idioma(vaga: str, analise: dict | None, cfg: dict) -> str:
 
 # ------------------------------------------------------------------------ geração
 
-def _limites(cfg: dict, kb: KB) -> str:
-    por_exp = ", ".join(
-        f"{e.slug}={render._limite_bullets(cfg, i)}" for i, e in enumerate(kb.experiencias()))
+def _anos_desde(fim: str, hoje: date) -> float:
+    if fim == "atual":
+        return 0.0
+    ano, mes = (int(x) for x in fim.split("-"))
+    return ((hoje.year - ano) * 12 + (hoje.month - mes)) / 12
+
+
+def relevancia_por_experiencia(analise: dict | None) -> dict[str, int]:
+    """Quanto cada experiência pesa nesta vaga, pelas evidências da análise (obrigatório vale 2, desejável 1)."""
+    pesos: dict[str, int] = {}
+    for r in (analise or {}).get("requisitos", []):
+        if r.get("status") not in ("coberto", "parcial"):
+            continue
+        peso = 2 if r.get("tipo") == "obrigatorio" else 1
+        for slug in {i.split("#")[0] for i in r.get("evidencias", [])}:
+            pesos[slug] = pesos.get(slug, 0) + peso
+    return pesos
+
+
+def limites_por_experiencia(kb: KB, cfg: dict, analise: dict | None = None, hoje: date | None = None) -> dict[str, dict]:
+    """Quantos bullets cada experiência recebe nesta vaga: {slug: {"limite": n, "motivo": texto}}.
+
+    Parte do limite por posição (mais recente, mais espaço). Experiência que terminou há muito tempo é
+    resumida, a menos que a análise da vaga a torne relevante. 0 significa só cargo, empresa e datas.
+    """
+    hoje = hoje or date.today()
+    regra = {**config.PADROES["experiencias_antigas"], **(cfg.get("experiencias_antigas") or {})}
+    pesos = relevancia_por_experiencia(analise)
+    topo = render._limite_bullets(cfg, 0)
+    saida: dict[str, dict] = {}
+    exps = kb.experiencias()
+    total = len(exps)
+    for pos, e in enumerate(exps):
+        base = render._limite_bullets(cfg, pos)
+        lim = base
+        motivo = "a mais recente" if pos == 0 else f"{pos + 1}ª mais recente"
+        relevante = pesos.get(e.slug, 0) >= 2
+        anos = _anos_desde(e.meta["fim"], hoje)
+        # "início de carreira": as N mais antigas, mas só quando sobram ao menos 3 recentes completas
+        inicio_de_carreira = (bool(regra["ativo"]) and total - int(regra["mais_antigas"]) >= 3
+                              and pos >= total - int(regra["mais_antigas"]))
+        if regra["ativo"] and (anos > float(regra["anos"]) or inicio_de_carreira):
+            quando = f"terminou há {anos:.0f} anos" if anos > float(regra["anos"]) else "início de carreira"
+            if relevante:
+                lim = int(regra["max_bullets_relevante"])
+                motivo = f"{quando}, mas a vaga a torna relevante"
+            else:
+                lim = min(base, int(regra["max_bullets"]))
+                motivo = f"{quando} e pesa pouco nesta vaga: resumida"
+        elif relevante and pos > 0:
+            lim = min(topo, base + 1)
+            motivo += ", relevante para esta vaga (+1)" if lim > base else ", relevante para esta vaga"
+        saida[e.slug] = {"limite": lim, "motivo": motivo, "rotulo": f"{e.meta['empresa']} · {e.meta['cargo']}"}
+    return saida
+
+
+def _limites(cfg: dict, kb: KB, limites: dict[str, dict]) -> str:
+    por_exp = "\n".join(f"  - {e.slug}: {limites[e.slug]['limite']} ({limites[e.slug]['motivo']})"
+                        for e in kb.experiencias() if e.slug in limites)
     return (
         "# Limites desta geração\n"
         f"- Resumo: no máximo {cfg['resumo_max_palavras']} palavras.\n"
         f"- Competências: no máximo {cfg['max_grupos_competencias']} grupos.\n"
-        f"- Máximo de bullets por experiência: {por_exp or '(nenhuma)'}.\n"
+        f"- Máximo de bullets por experiência:\n{por_exp or '  (nenhuma)'}\n"
+        "- Experiência com limite 1 ou 2 é um RESUMO: escreva bullets curtos e densos que sintetizem a função e o "
+        "resultado mais relevante para a vaga, sem repetir o que as experiências recentes já dizem. Limite 0: devolva "
+        "`bullets` vazio (o sistema mostra só cargo e datas).\n"
         "O sistema corta o que passar desses limites."
     )
 
@@ -127,13 +188,19 @@ def _analise_para_prompt(analise: dict) -> str:
 
 
 def gerar(llm, kb: KB, vaga: str, analise: dict, idioma: str, cfg: dict | None = None,
-          titulo_usuario: str | None = None, verificar_ia: bool = True) -> Resultado:
+          titulo_usuario: str | None = None, verificar_ia: bool = True,
+          limites_manuais: dict[str, int] | None = None) -> Resultado:
     cfg = cfg or config.carregar_config()
     if not kb.ids_confirmados():
         raise ErroBase("A base não tem fatos confirmados para gerar um currículo.")
+    detalhe = limites_por_experiencia(kb, cfg, analise)
+    for slug, n in (limites_manuais or {}).items():
+        if slug in detalhe and int(n) != detalhe[slug]["limite"]:
+            detalhe[slug] = {**detalhe[slug], "limite": int(n), "motivo": "ajustado por você"}
+    limites = {slug: v["limite"] for slug, v in detalhe.items()}
     sistema = "\n\n".join([config.ler_prompt("gerador"),
                            "# Guidelines de escrita\n" + config.ler_guidelines(),
-                           _limites(cfg, kb)])
+                           _limites(cfg, kb, detalhe)])
     usuario = (
         f"## Idioma de saída\n{NOMES_IDIOMA[idioma]}. Escreva TODO o conteúdo nesse idioma.\n\n"
         f"## Título escolhido pela candidata\n{titulo_usuario.strip() if titulo_usuario and titulo_usuario.strip() else '(nenhum)'}\n\n"
@@ -144,7 +211,7 @@ def gerar(llm, kb: KB, vaga: str, analise: dict, idioma: str, cfg: dict | None =
     bruto = completar_json(llm, [{"role": "system", "content": sistema}, {"role": "user", "content": usuario}],
                            temperatura=0.3, rotulo="gerador")
     palavras = analise.get("palavras_chave", [])
-    cv = render.montar(kb, bruto, idioma, cfg, titulo_usuario, fiscal="pendente" if verificar_ia else "ausente")
+    cv = render.montar(kb, bruto, idioma, cfg, titulo_usuario, fiscal="pendente" if verificar_ia else "ausente", limites=limites)
     cob = cobertura_palavras(palavras, cv.corpo, kb.textos_confirmados(), cv.mesmo_idioma)
     verificou = False
     pendentes = cob["fora_indeterminadas"] + cob["usadas_indeterminadas"]
@@ -154,15 +221,15 @@ def gerar(llm, kb: KB, vaga: str, analise: dict, idioma: str, cfg: dict | None =
             verificou = True
             if v["problemas"]:
                 # Segunda montagem, sem IA: o código aplica o veredito (remove termos, alerta frases).
-                cv = render.montar(kb, bruto, idioma, cfg, titulo_usuario, veredito=v["problemas"], fiscal="ok")
+                cv = render.montar(kb, bruto, idioma, cfg, titulo_usuario, veredito=v["problemas"], fiscal="ok", limites=limites)
                 cob = cobertura_palavras(palavras, cv.corpo, kb.textos_confirmados(), cv.mesmo_idioma)
             _resolver_indeterminadas(cob, v["palavras"])
         except ErroLLM as e:
             # Sem fiscal, volta à regra do código (siglas e termos julgados pelas palavras da base).
-            cv = render.montar(kb, bruto, idioma, cfg, titulo_usuario, fiscal="ausente")
+            cv = render.montar(kb, bruto, idioma, cfg, titulo_usuario, fiscal="ausente", limites=limites)
             cob = cobertura_palavras(palavras, cv.corpo, kb.textos_confirmados(), cv.mesmo_idioma)
             cv.alertas.append(f"A verificação por IA não rodou ({e}). Revise com atenção os termos e frases.")
-    return Resultado(cv, cob, bruto if isinstance(bruto, dict) else {}, verificou)
+    return Resultado(cv, cob, bruto if isinstance(bruto, dict) else {}, verificou, detalhe)
 
 
 # ------------------------------------------------------------- fiscal por IA

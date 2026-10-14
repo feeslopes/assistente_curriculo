@@ -158,6 +158,15 @@ def validar_propostas(bruto, kb: KB, idioma_material: str | None = None,
             except ErroBase as e:
                 if not avisos_data:   # o aviso de data já explica; não repetir
                     problemas.append(f"Complete os dados da experiência antes de salvar. {e}")
+            # Mesma empresa e mesmo início de uma experiência que já existe: quase certamente é o mesmo cargo,
+            # por exemplo de um currículo em outro idioma. O código avisa; não depende do modelo perceber.
+            for a in kb.experiencias(True):
+                if (normalizar(a.meta["empresa"]) == normalizar(str(meta.get("empresa", "")))
+                        and a.meta["inicio"] == str(meta.get("inicio", ""))):
+                    problemas.append(f"Já existe uma experiência na mesma empresa com o mesmo início ({a.meta['cargo']}, "
+                                     f"{a.meta['empresa']}). Provavelmente é a mesma, talvez de um currículo em outro "
+                                     "idioma. Descarte esta revisão para não duplicar.")
+                    break
         elif destino in ARQUIVOS_FATOS or destino in slugs:
             meta = {}
         else:
