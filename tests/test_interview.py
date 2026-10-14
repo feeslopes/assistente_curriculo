@@ -175,3 +175,34 @@ class TestAberturaDinamica(unittest.TestCase):
         self.assertIn("aguardando a revisão", sistema)
         self.assertIn("Domina Excel avançado.", sistema)
         self.assertNotEqual(llm.chamadas[0]["mensagens"][1]["content"], interview.ABERTURA)  # abertura dinâmica
+
+
+class TestExperienciaDuplicada(unittest.TestCase):
+    def setUp(self):
+        self.kb, self.tmp = base_exemplo()
+
+    def tearDown(self):
+        limpar(self.tmp)
+
+    def bruto(self, **meta):
+        m = {"empresa": "Empresa Exemplo Digital", "cargo": "Marketing Analyst", "inicio": "2022-03", "fim": "atual"}
+        m.update(meta)
+        return {"propostas": [{"destino": "nova_experiencia", "meta": m,
+                               "fatos": [{"texto": "Managed paid media campaigns.", "origem": "dito"}]}]}
+
+    def test_mesma_empresa_e_inicio_em_outro_idioma_gera_aviso(self):
+        props = interview.validar_propostas(self.bruto(), self.kb)
+        self.assertTrue(any("Já existe uma experiência" in p for p in props[0].problemas))
+        self.assertTrue(any("Analista de Marketing" in p for p in props[0].problemas))
+
+    def test_empresa_com_caixa_e_acento_diferentes_tambem_casa(self):
+        props = interview.validar_propostas(self.bruto(empresa="EMPRESA EXEMPLO DIGITAL"), self.kb)
+        self.assertTrue(any("Já existe" in p for p in props[0].problemas))
+
+    def test_mesma_empresa_com_outro_inicio_nao_avisa(self):
+        props = interview.validar_propostas(self.bruto(inicio="2015-01", fim="2016-01"), self.kb)
+        self.assertEqual(props[0].problemas, [])
+
+    def test_empresa_nova_nao_avisa(self):
+        props = interview.validar_propostas(self.bruto(empresa="Outra Empresa"), self.kb)
+        self.assertEqual(props[0].problemas, [])

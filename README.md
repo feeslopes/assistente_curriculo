@@ -123,7 +123,7 @@ Só `[confirmado]` chega à IA e ao currículo. `[sugerido]` fica guardado até 
 
 ### 1. Entrevista
 
-1. *(Opcional, mas recomendado)* Em **Importar um currículo existente**, envie o seu currículo atual (PDF, DOCX, MD ou TXT). Seu telefone, e-mail e LinkedIn são lidos no seu computador e vão para a aba Minha base, sem passar pela IA. Os fatos do currículo aparecem numa **revisão própria**: marque o que é verdade e clique em **Salvar**. **Enquanto você não salvar, nada do currículo está na sua base**, e a análise de vagas vai apontar como lacuna coisas que você tem.
+1. *(Opcional, mas recomendado)* Em **Importar um currículo existente**, envie o seu currículo atual (PDF, DOCX, MD ou TXT). **Importe um só, em um idioma só.** O aplicativo traduz para o idioma da vaga na hora de gerar, então um segundo currículo em outro idioma não acrescenta nada e criaria experiências e fatos duplicados. Se você importar um currículo em idioma diferente do da base, o aplicativo avisa, e se uma "nova experiência" tiver a mesma empresa e o mesmo início de uma que já existe, a revisão mostra um alerta. Nesses casos, descarte a revisão. Seu telefone, e-mail e LinkedIn são lidos no seu computador e vão para a aba Minha base, sem passar pela IA. Os fatos do currículo aparecem numa **revisão própria**: marque o que é verdade e clique em **Salvar**. **Enquanto você não salvar, nada do currículo está na sua base**, e a análise de vagas vai apontar como lacuna coisas que você tem.
 2. **Converse.** Com a base já preenchida, o entrevistador não repete o que já está nela: ele só pergunta o que falta (números, resultados, escopo, seções vazias). Uma pergunta por vez. Se você só tem uma estimativa, diga que é estimativa. Depois de umas 8 respostas, o aplicativo sugere encerrar a rodada. Dá para fazer outra rodada depois.
 3. Clique em **Encerrar rodada e revisar.** Você verá a lista de fatos que a IA entendeu.
    - Fatos que **você disse** vêm marcados.
@@ -137,8 +137,9 @@ Se a IA completar uma data que você não disse (por exemplo, o mês), o aplicat
 1. **Cole o texto da vaga** (ou envie um arquivo) e clique em **Analisar vaga.** Você verá cada requisito como `coberto`, `parcial` ou `lacuna`, mais as palavras-chave da vaga.
 2. **Lacunas.** Para cada requisito sem prova na base, há uma pergunta. Responda **só o que for verdade**. Se você não tem a experiência, marque *Não tenho essa experiência*. Salve as respostas (elas passam pela mesma tela de revisão) e use **Reanalisar com a base atualizada**.
 3. **Idioma.** O aplicativo recomenda o idioma da vaga, mas a escolha é sua. Se o idioma for diferente do idioma da sua base, ele sugere a tradução dos cargos e você confirma ou edita cada uma.
-4. **Gerar currículo.** Aparecem os alertas, a cobertura de palavras-chave e o texto do currículo, que você pode **editar**. O PDF e o DOCX saem do texto que está na tela.
-5. **Baixe** o PDF, o DOCX ou o Markdown, ou use **Salvar na pasta de saídas** (cria `saidas/data-empresa-vaga/` com o currículo, a vaga e a análise).
+4. **Espaço de cada experiência.** Antes de gerar, o painel **Espaço de cada experiência** mostra quantos bullets cada cargo vai receber e por quê. O aplicativo segue a prática de um currículo experiente: as **recentes ganham mais espaço** e as **primeiras experiências da carreira ficam bem resumidas** (um bullet, ou só cargo e datas). A vaga ajusta isso: se a análise mostra que uma experiência antiga é relevante, ela ganha espaço de volta, e as recentes relevantes ganham um bullet a mais. Você pode corrigir o número de qualquer experiência, vaga por vaga (**0** mostra só cargo, empresa e datas).
+5. **Gerar currículo.** Aparecem os alertas, a cobertura de palavras-chave e o texto do currículo, que você pode **editar**. O PDF e o DOCX saem do texto que está na tela.
+6. **Baixe** o PDF, o DOCX ou o Markdown, ou use **Salvar na pasta de saídas** (cria `saidas/data-empresa-vaga/` com o currículo, a vaga e a análise).
 
 ### Como ler os alertas e a cobertura
 
@@ -476,6 +477,7 @@ A IA fiscal é uma segunda chamada ao modelo. Ela reduz o risco, mas **não é p
 | Fechei o aplicativo no meio da conversa | Abra de novo. A conversa e as revisões não salvas voltam sozinhas, com um aviso no topo. Para recomeçar do zero, use **Começar uma conversa nova**. |
 | Quero ver o que a IA recebeu e respondeu | Aba **Minha base**, item **Registro das interações com a IA**, ou a pasta `saidas/logs`. |
 | Quero fazer backup | Copie a pasta `base/`. É tudo o que importa. |
+| Quero mais (ou menos) espaço para as experiências antigas | No painel **Espaço de cada experiência**, vaga por vaga, ou no `config.yaml`: `bullets_por_experiencia` (por posição) e `experiencias_antigas` (`anos`, `mais_antigas`, `max_bullets`, `max_bullets_relevante`; `ativo: false` desliga a regra de antiguidade). |
 | Quero mudar o jeito que o currículo é escrito | Edite o `guidelines.md` (tom, verbos, estilo) ou o `config.yaml` (limites, ordem e nome das seções). |
 
 ---
@@ -530,9 +532,10 @@ Decisões que o briefing original não cobria, tomadas durante o desenvolvimento
 - **IA fiscal em uma segunda chamada**, em vez de confiar só no filtro de palavras, porque palavras não são comparáveis entre idiomas.
 - **Mês de data nunca é completado pela IA.** Se você só disse o ano, o campo fica em branco para você preencher.
 - **Tradução de cargos com confirmação.** A IA sugere, nada é gravado sem você confirmar. Campos `cargo_pt`, `cargo_en`, `local_pt` e `local_en`.
-- **Bases em um idioma só.** O aplicativo avisa se a base mistura português e inglês, porque as verificações dependem do idioma dominante.
+- **Bases em um idioma só.** O aplicativo avisa se a base mistura português e inglês, porque as verificações dependem do idioma dominante. Um currículo importado em outro idioma que a base gera aviso, e uma experiência com a mesma empresa e o mesmo início de uma existente gera alerta na revisão. O aplicativo não junta experiências sozinho: a decisão de descartar ou aproveitar é sua.
 - **Instituições de ensino são traduzidas** para o idioma do currículo. Empresas, produtos e certificações não.
 - **Tempo verbal do cargo atual é livre**, desde que consistente dentro de cada experiência.
+- **Espaço por experiência decidido pelo código e ajustável.** Parte de um limite por posição (mais recente, mais espaço). Experiências antigas (terminaram há mais de 10 anos, ou as 2 mais antigas de um histórico com ao menos 3 recentes) ficam com 1 bullet, a menos que a análise da vaga as torne relevantes (peso 2: um requisito obrigatório ou dois desejáveis apoiados nelas), caso em que ganham até 3. Recentes relevantes ganham 1 a mais, até o limite da mais recente. Limite 0 mostra só cargo, empresa e datas e não gera alerta de "buraco" no histórico, porque foi escolha sua. O modelo recebe o limite de cada experiência e a instrução de escrever um resumo denso quando o limite é baixo.
 - **Extrator conservador.** Só o que você afirmou vem marcado. Qualquer origem desconhecida conta como sugestão.
 - **Sem banco de dados, login ou servidor.** Tudo em arquivos locais.
 

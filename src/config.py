@@ -14,6 +14,7 @@ PADROES = {
     "resumo_max_palavras": 70,
     "bullets_por_experiencia": [5, 4, 3, 2],
     "max_grupos_competencias": 6,
+    "experiencias_antigas": {"ativo": True, "anos": 10, "mais_antigas": 2, "max_bullets": 1, "max_bullets_relevante": 3},
     "bullets_sem_fonte": "remover",
     "ordem_secoes": ["resumo", "competencias", "experiencia", "formacao", "certificacoes", "idiomas"],
     "titulos_secoes": {

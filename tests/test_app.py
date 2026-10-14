@@ -27,8 +27,12 @@ class TestApp(unittest.TestCase):
         self.env.start()
         self.sem_env = mock.patch.object(self.app.config, "carregar_env", lambda: None)
         self.sem_env.start()
+        # nunca ler nem gravar a pasta saidas/ real do projeto (tem logs do uso de verdade)
+        self.saidas = mock.patch.object(self.app.config, "saidas_dir", lambda: self.tmp / "saidas")
+        self.saidas.start()
 
     def tearDown(self):
+        self.saidas.stop()
         self.sem_env.stop()
         self.env.stop()
         self.patch_mod.stop()
@@ -288,6 +292,30 @@ class TestApp(unittest.TestCase):
         nomes = [c[1][0] for c in self.st.chamadas if c[0] == "download_button"]
         self.assertTrue(any("Baixar o registro" in n for n in nomes))
 
+    def test_painel_de_espaco_por_experiencia_e_ajuste_manual(self):
+        from tests.fakes import SLUG_ESTAG
+        llm = self.usar_llm(analise_bruta(), gerado_bom(), {"problemas": [], "palavras": []})
+        self.st.valores["vaga_texto"] = VAGA_PT
+        self.st.cliques = {"btn_analisar"}
+        self.rodar()
+        aid = self.st.session_state["analise_id"]
+        self.st.cliques = set()
+        self.rodar()     # o rerun da análise interrompe a execução; o painel aparece na seguinte
+        # o painel existe e vem preenchido pela regra (a base de exemplo é recente: segue a posição)
+        self.assertEqual(self.st.session_state[f"lim_{aid}_{SLUG_ESTAG}"], 3)
+        self.st.valores[f"lim_{aid}_{SLUG_ESTAG}"] = 0
+        self.st.cliques = {"btn_gerar"}
+        self.rodar()
+        res = self.st.session_state["resultado"]
+        self.assertEqual(res.limites[SLUG_ESTAG]["limite"], 0)
+        self.assertEqual(res.limites[SLUG_ESTAG]["motivo"], "ajustado por você")
+        self.assertIn(f"{SLUG_ESTAG}: 0 (ajustado por você)", llm.chamadas[1]["mensagens"][0]["content"])
+        self.assertIn("**Loja Modelo**", res.curriculo.markdown)
+        self.assertNotIn("Apoiou um evento de lançamento", res.curriculo.markdown)
+        self.st.cliques = set()
+        self.rodar()     # a tela de resultado mostra como o espaço foi decidido
+        self.assertIn("bullet(s)", self.textos("write"))
+
     def test_aba_base_acoes(self):
         self.st.valores["ed_arquivo"] = "perfil"
         self.st.cliques = {"conf_empresa-exemplo-digital-analista-de-marketing#6"}
@@ -335,6 +363,43 @@ class TestApp(unittest.TestCase):
         self.rodar()
         self.assertIn("Limite de uso", self.textos("error"))
         self.assertEqual(self.st.session_state["chat"], [])
+
+    CV_EN = ("Mariana Example\nMarketing Analyst\n" + "Worked with the team on paid media campaigns and reporting for the company. " * 4)
+
+    def test_aviso_fixo_na_area_de_importacao(self):
+        self.rodar()
+        legendas = " ".join(str(c[1][0]) for c in self.st.chamadas if c[0] == "caption")
+        self.assertIn("um** idioma só", legendas)
+
+    def test_cv_em_outro_idioma_que_a_base_gera_aviso_de_duplicacao(self):
+        self.usar_llm({"propostas": [{"destino": "habilidades", "meta": {},
+                                      "fatos": [{"texto": "Uses Excel for reporting.", "origem": "dito"}]}]})
+        self.st.uploads["up_curriculo"] = stub.ArquivoFalso("cv_en.txt", self.CV_EN.encode("utf-8"))
+        self.st.cliques = {"btn_importar"}
+        self.rodar()
+        tipo, texto = self.st.session_state["msg"]
+        self.assertEqual(tipo, "warning")
+        self.assertIn("descarte esta revisão", texto)
+        self.assertIn("português", texto)
+        self.assertIn("inglês", texto)
+
+    def test_cv_no_mesmo_idioma_da_base_so_informa(self):
+        cv_pt = ("Ana Souza\nAnalista\n" + "Trabalhou com a equipe em campanhas de mídia paga e relatórios para a empresa. " * 4)
+        self.usar_llm({"propostas": [{"destino": "habilidades", "meta": {},
+                                      "fatos": [{"texto": "Domina Excel.", "origem": "dito"}]}]})
+        self.st.uploads["up_curriculo"] = stub.ArquivoFalso("cv_pt.txt", cv_pt.encode("utf-8"))
+        self.st.cliques = {"btn_importar"}
+        self.rodar()
+        self.assertEqual(self.st.session_state["msg"][0], "info")
+
+    def test_primeira_importacao_em_base_vazia_nao_avisa(self):
+        self.usar_llm({"propostas": [{"destino": "habilidades", "meta": {},
+                                      "fatos": [{"texto": "Uses Excel.", "origem": "dito"}]}]})
+        with mock.patch.dict(os.environ, {"CV_BASE_DIR": str(self.tmp / "vazia")}):
+            self.st.uploads["up_curriculo"] = stub.ArquivoFalso("cv_en.txt", self.CV_EN.encode("utf-8"))
+            self.st.cliques = {"btn_importar"}
+            self.rodar()
+        self.assertEqual(self.st.session_state["msg"][0], "info")
 
 
 if __name__ == "__main__":

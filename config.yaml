@@ -17,6 +17,22 @@ bullets_por_experiencia: [5, 4, 3, 2]
 # Máximo de grupos na seção de competências.
 max_grupos_competencias: 6
 
+# Experiências antigas ficam resumidas, a menos que a vaga as torne relevantes.
+# O espaço de cada experiência sai de três coisas, nesta ordem:
+#   1. bullets_por_experiencia (acima): mais espaço para as mais recentes.
+#   2. Se a experiência terminou há mais de "anos" anos, ou é uma das "mais_antigas" do seu
+#      histórico (início de carreira, só quando sobram ao menos 3 recentes completas), vale o
+#      teto "max_bullets" (0 = só cargo, empresa e datas). Se a análise da vaga mostra que
+#      ela é relevante, o teto sobe para "max_bullets_relevante".
+#   3. Você pode ajustar o número de cada experiência na tela, vaga por vaga, antes de gerar.
+# Para desligar a regra de antiguidade, coloque ativo: false.
+experiencias_antigas:
+  ativo: true
+  anos: 10
+  mais_antigas: 2
+  max_bullets: 1
+  max_bullets_relevante: 3
+
 # O que fazer com um item que a IA escreveu sem apontar um fato confirmado da base.
 # remover = tira do currículo e mostra o que foi tirado (recomendado)
 # manter_com_aviso = mantém e só avisa

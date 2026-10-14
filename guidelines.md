@@ -32,6 +32,12 @@ como o currículo é escrito. Limites numéricos e ordem das seções ficam em `
 - Não termine bullets com ponto final se o conjunto inteiro não usar. Seja consistente.
 - Prefira os bullets que mais conversam com a vaga e coloque-os primeiro em cada experiência.
 
+## Quanto espaço cada experiência recebe
+- O foco do currículo está nas experiências recentes e nas mais relevantes para a vaga. O limite de bullets de cada
+  experiência vem do sistema (ver `config.yaml` e o painel de espaço na tela) e deve ser respeitado.
+- Experiência com limite baixo (1 ou 2) é um resumo: uma linha densa com a função e o resultado que mais conversa
+  com a vaga, sem repetir o que as experiências recentes já dizem. Limite 0: nenhum bullet.
+
 ## Resumo
 - 3 a 4 linhas. Comece pelo cargo e, só se estiver na base, pelo tempo de experiência.
 - Inclua 2 ou 3 diferenciais que aparecem na vaga e que a base comprova.
