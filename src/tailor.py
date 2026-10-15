@@ -5,7 +5,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import date
 
-from . import config, interview, relatorio, render
+from . import aderencia, config, interview, relatorio, render
 from .kb import KB, ErroBase
 from .llm import ErroLLM, completar_json
 from .texto import detectar_idioma
@@ -23,6 +23,7 @@ class Resultado:
     verificacao_ia: bool = False
     limites: dict = field(default_factory=dict)   # slug -> {limite, motivo}
     relatorio: dict = field(default_factory=dict)  # ver relatorio.montar
+    aderencia: dict = field(default_factory=dict)  # ver aderencia.comparar (antes, depois, melhorias)
 
 
 # ------------------------------------------------------------------------ análise
@@ -249,6 +250,7 @@ def gerar(llm, kb: KB, vaga: str, analise: dict, idioma: str, cfg: dict | None =
             cv.alertas.append(f"A verificação por IA não rodou ({e}). Revise com atenção os termos e frases.")
     res = Resultado(cv, cob, bruto if isinstance(bruto, dict) else {}, verificou, detalhe)
     res.relatorio = relatorio.montar(kb, analise, res, cfg, idioma)
+    res.aderencia = aderencia.comparar(kb, analise, cv.markdown, cv.rastro, cfg, idioma)
     return res
 
 
