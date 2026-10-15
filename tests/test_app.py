@@ -313,8 +313,12 @@ class TestApp(unittest.TestCase):
         self.assertIn("**Loja Modelo**", res.curriculo.markdown)
         self.assertNotIn("Apoiou um evento de lançamento", res.curriculo.markdown)
         self.st.cliques = set()
-        self.rodar()     # a tela de resultado mostra como o espaço foi decidido
-        self.assertIn("bullet(s)", self.textos("write"))
+        self.rodar()     # a tela de resultado traz o relatório, com o espaço de cada experiência
+        relatorio_na_tela = self.textos("markdown")
+        self.assertIn("Como cada parte foi escrita", relatorio_na_tela)
+        self.assertIn("0 bullet(s), ajustado por você", relatorio_na_tela)
+        nomes = [c[1][0] for c in self.st.chamadas if c[0] == "download_button"]
+        self.assertIn("Baixar o relatório", nomes)
 
     def test_aba_base_acoes(self):
         self.st.valores["ed_arquivo"] = "perfil"

@@ -192,6 +192,35 @@ class TestTraducao(unittest.TestCase):
         res = tailor.gerar(llm, self.kb, "Vaga", analise, "pt", self.cfg)
         self.assertNotIn("HubSpot", res.curriculo.markdown)
 
+    def test_fiscal_novo_formato_so_age_em_exagero_e_sem_respaldo(self):
+        itens = [{"chave": f"k|{i}", "secao": "k", "tipo": "frase", "texto": str(i), "fatos": ["f"]} for i in range(4)]
+        llm = LLMFalso({"itens": [
+            {"n": 0, "veredito": "ok", "problema": ""},
+            {"n": 1, "veredito": "exagero", "problema": "Afirma liderou, mas o fato diz apoiou."},
+            {"n": 2, "veredito": "sem_respaldo", "problema": "Nenhum fato cita HubSpot."},
+            {"n": 3, "veredito": "ok", "problema": "texto solto que deve ser ignorado"}], "palavras": []})
+        v = tailor.verificar_com_ia(llm, self.kb, itens, [])
+        self.assertEqual(sorted(v["problemas"]), ["k|1", "k|2"])
+
+    def test_fiscal_descarta_apontamento_que_diz_que_esta_fiel(self):
+        """Caso real: 38 itens apontados, quase todos com 'que é uma tradução fiel' no próprio motivo."""
+        itens = [{"chave": f"k|{i}", "secao": "k", "tipo": "frase", "texto": str(i), "fatos": ["f"]} for i in range(6)]
+        llm = LLMFalso({"itens": [
+            {"n": 0, "veredito": "exagero", "problema": "A frase afirma 'Português: Nativo', mas os fatos dizem 'Nativo', que é uma tradução fiel."},
+            {"n": 1, "veredito": "sem_respaldo", "problema": "O termo 'open innovation' é suportado pelos fatos, mas o item não tem problema."},
+            {"n": 2, "veredito": "sem_respaldo", "problema": "Fatos dizem 'governança de inovação', equivalente a 'innovation governance'."},
+            {"n": 3, "veredito": "exagero", "problema": "A frase afirma que liderou, mas o fato diz que apoiou."},
+            {"n": 4, "veredito": "sem_respaldo", "problema": "Nenhum fato menciona gestão de backlog."},
+            {"n": 5, "veredito": "ok", "problema": ""}]})
+        v = tailor.verificar_com_ia(llm, self.kb, itens, [])
+        self.assertEqual(sorted(v["problemas"]), ["k|3", "k|4"])      # só os apontamentos coerentes
+        self.assertEqual(v["descartados"], 3)
+
+    def test_fiscal_ainda_aceita_o_formato_antigo(self):
+        itens = [{"chave": "k|x", "secao": "k", "tipo": "frase", "texto": "x", "fatos": []}]
+        llm = LLMFalso({"problemas": [{"n": 0, "problema": "Nenhum fato cita HubSpot."}]})
+        self.assertEqual(list(tailor.verificar_com_ia(llm, self.kb, itens, [])["problemas"]), ["k|x"])
+
     def test_fiscal_ignora_lixo_e_indices_invalidos(self):
         itens = [{"chave": "k|x", "secao": "k", "tipo": "frase", "texto": "x", "fatos": []}]
         llm = LLMFalso({"problemas": [{"n": 99, "problema": "x"}, {"n": "a"}, {"n": 0, "problema": ""}, "lixo"]})

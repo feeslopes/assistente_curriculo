@@ -110,8 +110,22 @@ def siglas_nao_suportadas(texto: str, base_palavras: set[str], estrito: bool = T
     return saida
 
 
+def contem_termo(texto: str, termo: str) -> bool:
+    """O termo aparece como palavra inteira no texto (sem acento, sem diferença de maiúsculas)?"""
+    return _contem(normalizar(texto), normalizar(termo))
+
+
+def _padrao_termo(termo_norm: str) -> str:
+    """Padrão que aceita singular e plural de cada palavra ("product squad" casa com "product squads")."""
+    partes = []
+    for w in termo_norm.split(" "):
+        base = w[:-1] if len(w) >= 4 and w.endswith("s") else w
+        partes.append(re.escape(base) + ("(?:es|s)?" if len(base) >= 3 else ""))
+    return r"\s+".join(partes)
+
+
 def _contem(texto_norm: str, termo_norm: str) -> bool:
-    return bool(re.search(rf"(?<![a-z0-9]){re.escape(termo_norm)}(?![a-z0-9])", texto_norm))
+    return bool(re.search(rf"(?<![a-z0-9]){_padrao_termo(termo_norm)}(?![a-z0-9])", texto_norm))
 
 
 def cobertura_palavras(palavras: list[str], texto_final: str, textos_base: list[str],

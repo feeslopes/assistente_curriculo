@@ -5,7 +5,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import date
 
-from . import config, interview, render
+from . import config, interview, relatorio, render
 from .kb import KB, ErroBase
 from .llm import ErroLLM, completar_json
 from .texto import detectar_idioma
@@ -22,6 +22,7 @@ class Resultado:
     gerado_bruto: dict
     verificacao_ia: bool = False
     limites: dict = field(default_factory=dict)   # slug -> {limite, motivo}
+    relatorio: dict = field(default_factory=dict)  # ver relatorio.montar
 
 
 # ------------------------------------------------------------------------ análise
@@ -54,12 +55,24 @@ def validar_analise(bruto, ids_ok: set[str]) -> dict:
         if p and p.lower() not in vistas:
             vistas.add(p.lower())
             palavras.append(p)
+    por_norma = {p.lower(): p for p in palavras}
+    base: list[dict] = []
+    vistos_base: set[str] = set()
+    for item in a.get("palavras_chave_base") or []:
+        if not isinstance(item, dict):
+            continue
+        termo = por_norma.get(str(item.get("termo", "")).strip().lower())
+        evid = [str(e).strip() for e in (item.get("evidencias") or []) if str(e).strip() in ids_ok]
+        if termo and evid and termo.lower() not in vistos_base:   # sem fato real, não é "sustentada"
+            vistos_base.add(termo.lower())
+            base.append({"termo": termo, "evidencias": evid})
     idioma = str(a.get("idioma_vaga", "")).strip().lower()
     return {
         "titulo_vaga": str(a.get("titulo_vaga", "")).strip(),
         "empresa": str(a.get("empresa", "")).strip(),
         "idioma_vaga": idioma if idioma in ("pt", "en", "es", "outro") else "outro",
         "palavras_chave": palavras[:25],
+        "palavras_chave_base": base,
         "requisitos": reqs,
         "observacoes": str(a.get("observacoes", "")).strip(),
     }
@@ -180,7 +193,12 @@ def _limites(cfg: dict, kb: KB, limites: dict[str, dict]) -> str:
 def _analise_para_prompt(analise: dict) -> str:
     enxuta = {
         "titulo_vaga": analise.get("titulo_vaga"),
-        "palavras_chave": analise.get("palavras_chave"),
+        # o que a base sustenta (com os fatos) e o que NÃO pode ser usado: o gerador casa o vocabulário só no primeiro
+        "palavras_chave_que_a_base_sustenta": [
+            {"termo": p["termo"], "fatos": p["evidencias"]} for p in analise.get("palavras_chave_base", [])],
+        "palavras_chave_sem_base_NAO_USE": [
+            p for p in analise.get("palavras_chave", [])
+            if p.lower() not in {x["termo"].lower() for x in analise.get("palavras_chave_base", [])}],
         "requisitos": [{k: r[k] for k in ("requisito", "tipo", "status", "evidencias")}
                        for r in analise.get("requisitos", [])],
     }
@@ -229,7 +247,9 @@ def gerar(llm, kb: KB, vaga: str, analise: dict, idioma: str, cfg: dict | None =
             cv = render.montar(kb, bruto, idioma, cfg, titulo_usuario, fiscal="ausente", limites=limites)
             cob = cobertura_palavras(palavras, cv.corpo, kb.textos_confirmados(), cv.mesmo_idioma)
             cv.alertas.append(f"A verificação por IA não rodou ({e}). Revise com atenção os termos e frases.")
-    return Resultado(cv, cob, bruto if isinstance(bruto, dict) else {}, verificou, detalhe)
+    res = Resultado(cv, cob, bruto if isinstance(bruto, dict) else {}, verificou, detalhe)
+    res.relatorio = relatorio.montar(kb, analise, res, cfg, idioma)
+    return res
 
 
 # ------------------------------------------------------------- fiscal por IA
@@ -256,19 +276,43 @@ def verificar_com_ia(llm, kb: KB, itens: list[dict], palavras_pendentes: list[st
     bruto = completar_json(llm, [{"role": "system", "content": config.ler_prompt("verificador")},
                                  {"role": "user", "content": usuario}], temperatura=0.0, rotulo="verificador")
     bruto = bruto if isinstance(bruto, dict) else {}
-    problemas = {}
-    for p in bruto.get("problemas") or []:
+    problemas: dict[str, str] = {}
+    descartados = 0
+    # Formato novo: um veredito por item. Formato antigo ("problemas"): só a lista dos ruins (compatibilidade).
+    for p in (bruto.get("itens") or []) + (bruto.get("problemas") or []):
+        if not isinstance(p, dict):
+            continue
         try:
             n = int(p.get("n"))
-        except (AttributeError, TypeError, ValueError):
+        except (TypeError, ValueError):
             continue
-        if 0 <= n < len(itens) and str(p.get("problema", "")).strip():
-            problemas[itens[n]["chave"]] = str(p["problema"]).strip()
+        veredito = str(p.get("veredito", "exagero")).strip().lower()   # sem veredito = veio do formato antigo
+        motivo = str(p.get("problema", "")).strip()
+        if not (0 <= n < len(itens)) or veredito not in ("exagero", "sem_respaldo") or not motivo:
+            continue
+        if _contradiz(motivo):
+            descartados += 1      # o modelo apontou o item e, no mesmo texto, disse que está fiel: é ok
+            continue
+        problemas[itens[n]["chave"]] = motivo
     palavras = {}
     for p in bruto.get("palavras") or []:
         if isinstance(p, dict) and p.get("termo") in palavras_pendentes and isinstance(p.get("na_base"), bool):
             palavras[p["termo"]] = p["na_base"]
-    return {"problemas": problemas, "palavras": palavras}
+    return {"problemas": problemas, "palavras": palavras, "descartados": descartados}
+
+
+# Frases com que o modelo, ao "apontar" um item, admite que não há problema. Rede de segurança do veredito.
+_ADMITE_QUE_ESTA_OK = (
+    "traducao fiel", "tradução fiel", "e fiel", "é fiel", "fiel ao", "e suportado", "é suportado", "esta suportado",
+    "está suportado", "nao tem problema", "não tem problema", "sem problema", "nao apresenta problema",
+    "não apresenta problema", "equivalente", "corresponde", "boa traducao", "boa tradução", "traducao correta",
+    "tradução correta", "consistente com os fatos", "sustentado pelos fatos", "e sustentado", "é sustentado",
+)
+
+
+def _contradiz(motivo: str) -> bool:
+    t = motivo.lower()
+    return any(f in t for f in _ADMITE_QUE_ESTA_OK)
 
 
 def _resolver_indeterminadas(cob: dict, palavras: dict) -> None:
