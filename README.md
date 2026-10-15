@@ -28,29 +28,23 @@ A regra central do projeto, imposta por código e não só pedida à IA:
 
 Antes de qualquer envio, o aplicativo **mascara e-mails, telefones e links** e remove do texto os valores do seu cadastro de contato (incluindo o seu nome). O cabeçalho do currículo é montado localmente, depois da geração. Mesmo assim, **não digite telefone, endereço ou documentos no chat.**
 
-Cada provedor trata o que recebe de um jeito. Escolha sabendo disso:
-
-| Provedor | O que saber |
-|---|---|
-| **Gemini, plano gratuito** | O Google pode usar prompts e respostas para melhorar os produtos dele fora do Reino Unido, da Suíça e do Espaço Econômico Europeu. **O Brasil está fora dessa proteção.** No plano pago a regra é outra, confira nos termos do Google. |
-| **DeepSeek** | Os servidores ficam na China. |
-| **OpenRouter** | Depende do modelo e de quem o hospeda. Modelos gratuitos e mais fracos também inventam mais, o que é o pior risco para um currículo. |
+O provedor de IA usado é o **DeepSeek**, e os servidores dele ficam na China. Saiba disso antes de enviar qualquer informação.
 
 ---
 
 ## Instalação, sem usar terminal
 
-Você precisa de internet na primeira vez (para baixar as peças do aplicativo) e de uma **chave de API** (veja a próxima seção).
+Você precisa de internet (na primeira vez para baixar as peças do aplicativo, e depois para falar com a IA) e de uma **chave de API do DeepSeek** (veja a próxima seção).
 
 ### Windows
 
 1. **Instale o Python.** Entre em [python.org/downloads](https://www.python.org/downloads/), baixe a versão mais recente e abra o instalador. Na **primeira tela**, antes de clicar em *Install Now*, marque a caixa **"Add python.exe to PATH"**. Esse é o passo que mais dá problema quando esquecido.
 2. **Baixe o aplicativo.** Na página do projeto no GitHub, clique no botão verde **Code** e depois em **Download ZIP**. Clique com o botão direito no arquivo baixado, escolha **Extrair tudo** e deixe a pasta num lugar fácil, como Documentos.
-3. **Pegue a chave** do provedor escolhido (próxima seção).
+3. **Tenha a chave em mãos** (próxima seção).
 4. **Dê dois cliques em `iniciar.bat`.**
    - Na primeira vez, ele prepara tudo sozinho. Isso leva alguns minutos.
    - Se o Windows mostrar "O Windows protegeu seu computador", clique em **Mais informações** e depois em **Executar assim mesmo**. O arquivo é só texto: dá para abrir no Bloco de Notas e ler antes.
-5. **Cole a chave.** O Bloco de Notas abre com o arquivo `.env`. Escreva o provedor e cole a chave depois do sinal de `=`, como no exemplo abaixo. Salve e feche o Bloco de Notas.
+5. **Cole a chave.** O Bloco de Notas abre com o arquivo `.env`. Cole a chave logo depois de `DEEPSEEK_API_KEY=`, sem espaços e sem aspas. Salve e feche o Bloco de Notas.
 6. O navegador abre sozinho com o aplicativo. **Para encerrar, feche a janela preta.**
 
 Nas próximas vezes, basta dar dois cliques em `iniciar.bat`.
@@ -62,7 +56,7 @@ sudo apt install python3 python3-venv python3-pip   # ou o equivalente da sua di
 bash iniciar.sh
 ```
 
-Na primeira execução o script cria o arquivo `.env` e abre um editor. Cole a chave, salve e rode `bash iniciar.sh` de novo.
+Na primeira execução o script cria o arquivo `.env` e abre um editor. Cole a chave depois de `DEEPSEEK_API_KEY=`, salve e rode `bash iniciar.sh` de novo.
 
 ### Mac
 
@@ -81,18 +75,27 @@ Ele confere o Python, os pacotes, as pastas, a geração de PDF e DOCX, a conex�
 
 ---
 
-## Escolhendo o provedor e pegando a chave
+## Configurando a chave de API (arquivo `.env`)
 
-| | Gemini | DeepSeek | OpenRouter |
-|---|---|---|---|
-| Custo | Plano gratuito, com limite baixo por minuto | Pago, muito barato (um currículo custa centavos) | Modelos `:free` ou pagos |
-| Onde pegar a chave | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | [platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys) | [openrouter.ai/keys](https://openrouter.ai/keys) |
-| Modelo padrão | `gemini-3.8-flash` | `deepseek-flash` | nenhum: você precisa escrever `MODELO=` |
-| Cuidado | Dados podem ser usados pelo Google (veja Privacidade) | Servidores na China | Modelos gratuitos inventam mais |
+O aplicativo usa o **DeepSeek**. Ele é pago, mas muito barato: um currículo custa centavos. Você pode usar a sua própria chave (crie em [platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys), depois de colocar um pequeno saldo na conta) ou uma chave que alguém de confiança passou para você.
 
-Os nomes de modelos mudam com o tempo. Se der erro de "modelo não existe", rode `python verificar.py --modelos` e copie um nome da lista para a linha `MODELO=` do `.env`.
+A chave é como uma senha: quem tem a chave gasta o saldo de quem a criou. Por isso:
 
-Exemplo de `.env` (só a chave do provedor que você usa precisa estar preenchida):
+- **Não publique, não poste e não coloque a chave em nenhum arquivo que vá para o GitHub.** O arquivo `.env` é ignorado pelo Git de propósito.
+- Quem emprestou a chave pode **apagá-la a qualquer momento** na página de chaves do DeepSeek. Se o aplicativo parar de funcionar com "A chave de API foi recusada", provavelmente foi isso.
+
+### Como criar o `.env`
+
+O `.env` é um arquivo de texto com a sua chave, que fica só no seu computador.
+
+**Jeito fácil:** dê dois cliques em `iniciar.bat` (Windows) ou rode `bash iniciar.sh` (Linux). Se o `.env` ainda não existe, o script cria o arquivo a partir do modelo e abre o editor. Cole a chave, salve e feche.
+
+**Jeito manual** (se preferir, ou se o editor não abriu):
+
+1. Na pasta do aplicativo, ache o arquivo **`.env.example`**.
+2. Faça uma **cópia** dele e renomeie a cópia para **`.env`** (exatamente assim, com o ponto no começo e sem `.example` no final).
+   - No Windows, se o Explorador esconder as extensões, ative em *Exibir > Mostrar > Extensões de nomes de arquivos*. Se o Windows reclamar do nome, renomeie pelo Bloco de Notas: abra o `.env.example`, use *Arquivo > Salvar como*, escolha *Todos os arquivos* e digite `.env`.
+3. Abra o `.env` no Bloco de Notas e deixe assim, trocando só o que vem depois de `DEEPSEEK_API_KEY=`:
 
 ```ini
 PROVEDOR=deepseek
@@ -100,7 +103,12 @@ DEEPSEEK_API_KEY=cole_a_chave_aqui
 MODELO=
 ```
 
-**Nunca compartilhe o `.env`.** Ele é ignorado pelo Git de propósito.
+4. **Sem espaços, sem aspas, sem quebra de linha** no meio da chave. Salve e feche.
+5. Abra o aplicativo. Se aparecer uma tela dizendo que a IA ainda não está ligada, confira se o arquivo se chama mesmo `.env` (e não `.env.txt`) e se a chave está na linha `DEEPSEEK_API_KEY=`.
+
+Para testar a chave sem abrir o aplicativo, numa janela de terminal na pasta do aplicativo: `python verificar.py` (Windows: `.venv\Scripts\python verificar.py`).
+
+**Deixe `MODELO=` em branco**, a menos que quem emprestou a chave peça outro nome. Os nomes de modelos mudam com o tempo.
 
 ---
 
@@ -183,7 +191,7 @@ C4Context
   title Currículo sob medida: contexto
   Person(voce, "Você", "Quer um currículo honesto e sob medida para cada vaga")
   System(app, "Currículo sob medida", "Roda no seu computador. Guarda a base em arquivos e gera PDF e DOCX")
-  System_Ext(ia, "Provedor de IA", "Gemini, DeepSeek ou OpenRouter")
+  System_Ext(ia, "Provedor de IA", "DeepSeek")
   Rel(voce, app, "Conversa, confirma fatos, cola vagas e baixa currículos")
   Rel(app, ia, "Envia texto sem contato pessoal", "HTTPS")
 ```
@@ -482,8 +490,8 @@ A IA fiscal é uma segunda chamada ao modelo. Ela dá um **veredito para cada it
 |---|---|
 | "Não encontrei o Python" | Instale em python.org e marque **Add python.exe to PATH**. Feche e abra o `iniciar.bat` de novo. |
 | "A chave de API foi recusada" | Confira a chave no `.env`: sem espaços, sem aspas, na linha do provedor certo. |
-| "O modelo não existe nesse provedor" | Rode `python verificar.py --modelos` e use um nome da lista em `MODELO=`. |
-| "Limite de uso do provedor atingido" | No plano gratuito o limite por minuto é baixo. O aplicativo já tenta de novo sozinho. Espere cerca de um minuto. |
+| "O modelo não existe nesse provedor" | Deixe `MODELO=` em branco no `.env`, ou peça a quem emprestou a chave o nome certo. |
+| "Limite de uso do provedor atingido" ou análise muito demorada | O aplicativo já tenta de novo sozinho. Espere cerca de um minuto. Se o DeepSeek estiver fora do ar ou sem saldo, nada funciona até voltar. |
 | "Resposta vazia" ou "JSON inválido" | O modelo é fraco demais ou gastou tudo pensando. Tente de novo ou troque de modelo. |
 | A análise diz que eu não tenho algo que eu tenho | A análise só enxerga fatos **confirmados**. Confira se você salvou a revisão do currículo importado (aba Entrevista), se há fatos pendentes (aba Minha base) e se a base tem as experiências, a formação e as habilidades. O aplicativo mostra esses avisos no topo da aba da vaga. |
 | O entrevistador pergunta o que já está no meu currículo | Quase sempre é porque a revisão do currículo importado não foi salva. Salve, e a conversa passa a perguntar só o que falta. |
