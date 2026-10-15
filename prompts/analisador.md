@@ -13,6 +13,7 @@ Devolva somente um JSON, sem texto antes ou depois:
  "empresa": "",
  "idioma_vaga": "pt | en | es | outro",
  "palavras_chave": ["termos exatos da vaga, por ordem de importância, 10 a 25"],
+ "palavras_chave_base": [{"termo": "um item de palavras_chave", "evidencias": ["slug#n"]}],
  "requisitos": [
    {"requisito": "", "tipo": "obrigatorio | desejavel", "termo_na_vaga": "",
     "status": "coberto | parcial | lacuna", "evidencias": ["slug#n"], "pergunta": ""}
@@ -32,6 +33,11 @@ Devolva somente um JSON, sem texto antes ou depois:
   função), por ordem de importância. Sem soft skills genéricas ("proativo", "comunicativo", "dinâmico") e sem
   palavras vazias. Mantenha o idioma original da vaga. Inclua variações importantes (sigla e por extenso) só
   se a vaga usa as duas.
+- `palavras_chave_base`: SOMENTE as palavras-chave que a base sustenta, cada uma com os ids dos fatos que a sustentam.
+  O termo vem de `palavras_chave`, exatamente como lá. A base sustenta um termo quando um fato diz a mesma coisa,
+  mesmo em outro idioma ou com sinônimo direto ("squad multidisciplinar" sustenta "cross-functional team";
+  "OKRs trimestrais" sustenta "quarterly OKRs"). Deduzir pelo tipo de trabalho NÃO vale: "priorização e roadmap"
+  não sustenta "backlog". Sem fato, o termo fica fora desta lista. Use só ids fornecidos.
 - `requisitos`: de 5 a 15, os que realmente pesam na vaga. Separe `obrigatorio` de `desejavel` pelo que a vaga
   diz ("exigimos", "required" versus "diferencial", "nice to have").
 - `pergunta`: para todo requisito `parcial` ou `lacuna`, uma pergunta específica, em português do Brasil,

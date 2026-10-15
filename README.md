@@ -138,8 +138,25 @@ Se a IA completar uma data que você não disse (por exemplo, o mês), o aplicat
 2. **Lacunas.** Para cada requisito sem prova na base, há uma pergunta. Responda **só o que for verdade**. Se você não tem a experiência, marque *Não tenho essa experiência*. Salve as respostas (elas passam pela mesma tela de revisão) e use **Reanalisar com a base atualizada**.
 3. **Idioma.** O aplicativo recomenda o idioma da vaga, mas a escolha é sua. Se o idioma for diferente do idioma da sua base, ele sugere a tradução dos cargos e você confirma ou edita cada uma.
 4. **Espaço de cada experiência.** Antes de gerar, o painel **Espaço de cada experiência** mostra quantos bullets cada cargo vai receber e por quê. O aplicativo segue a prática de um currículo experiente: as **recentes ganham mais espaço** e as **primeiras experiências da carreira ficam bem resumidas** (um bullet, ou só cargo e datas). A vaga ajusta isso: se a análise mostra que uma experiência antiga é relevante, ela ganha espaço de volta, e as recentes relevantes ganham um bullet a mais. Você pode corrigir o número de qualquer experiência, vaga por vaga (**0** mostra só cargo, empresa e datas).
-5. **Gerar currículo.** Aparecem os alertas, a cobertura de palavras-chave e o texto do currículo, que você pode **editar**. O PDF e o DOCX saem do texto que está na tela.
-6. **Baixe** o PDF, o DOCX ou o Markdown, ou use **Salvar na pasta de saídas** (cria `saidas/data-empresa-vaga/` com o currículo, a vaga e a análise).
+5. **Gerar currículo.** Aparece primeiro um **placar** (obrigatórios cobertos, palavras-chave com respaldo, lacunas, pontos a conferir) e o **Relatório da adaptação**, que explica como o currículo foi escrito para esta vaga (veja abaixo). Depois vêm os alertas, a cobertura de palavras-chave e o texto do currículo, que você pode **editar**. O PDF e o DOCX saem do texto que está na tela.
+6. **Baixe** o PDF, o DOCX ou o Markdown, ou use **Salvar na pasta de saídas** (cria `saidas/data-empresa-vaga/` com o currículo, a vaga, a análise e o `relatorio.md`).
+
+### O relatório da adaptação
+
+Para cada currículo gerado, o aplicativo explica **como ele foi escrito para aquela vaga**, separando o que o código prova do que a IA conta:
+
+| Parte | O que mostra | De onde vem |
+|---|---|---|
+| **Encaixe com a vaga** | Obrigatórios e desejáveis cobertos, parciais e lacunas; palavras-chave usadas com respaldo; as lacunas obrigatórias | Código, a partir da análise |
+| **Palavras-chave que a sua base sustenta** | Cada termo da vaga que a sua base comprova e **onde ele entrou** (Resumo, Competências, qual experiência), ou que a base tem e o currículo não usou | Código |
+| **Estratégia da adaptação** | O que a vaga mais valoriza, o que foi destacado, as trocas de vocabulário feitas e o que ficou de fora por falta de base ou de espaço | **IA** (rotulada como explicação, não faz parte do currículo) |
+| **Como cada parte foi escrita** | Para cada bullet: o texto final **ao lado do fato da base** de onde veio, e as palavras-chave da vaga que ele contém | Código |
+| **O que ficou de fora e por quê** | O que o sistema removeu, as palavras-chave sem base, as experiências resumidas | Código |
+| **Pontos a conferir** | Os alertas | Código e IA fiscal |
+
+A estratégia vem da IA e pode errar ao descrever o que fez. Por isso o relatório sempre mostra o **fato da base ao lado do texto final**: você confere sozinho se o bullet foi só traduzido ou se foi realmente reescrito para a vaga.
+
+A adaptação em si funciona assim: a análise da vaga identifica quais palavras-chave a sua base sustenta (com os fatos que as sustentam) e quais não. O gerador recebe as duas listas, com a ordem de **usar o termo exato da vaga** onde um fato diz a mesma coisa com outras palavras ("squad multidisciplinar" vira "cross-functional squad" se a vaga usa esse termo), de **priorizar** os bullets com palavras-chave sustentadas e de **nunca usar** uma palavra sem base.
 
 ### Como ler os alertas e a cobertura
 
@@ -455,7 +472,7 @@ O id de cada fato é `arquivo#n`, onde n é a posição da linha marcada no arqu
 | Frase não exagera o que o fato diz | **IA fiscal** (só alerta, a decisão é sua) |
 | Tradução fiel de cargos e nomes | **IA sugere, você confirma** |
 
-A IA fiscal é uma segunda chamada ao modelo. Ela reduz o risco, mas **não é prova**: nos testes ela errou para o lado seguro (removeu um termo bom em vez de deixar passar um inventado), mas a amostra é pequena.
+A IA fiscal é uma segunda chamada ao modelo. Ela dá um **veredito para cada item** (`ok`, `exagero` ou `sem_respaldo`), em vez de listar só os problemas: assim uma tradução fiel é `ok`, e o código ainda descarta qualquer apontamento que diga no próprio texto que o item está fiel. Ela reduz o risco, mas **não é prova**: nos testes ela errou para o lado seguro (removeu um termo bom em vez de deixar passar um inventado), mas a amostra é pequena.
 
 ---
 
@@ -535,6 +552,8 @@ Decisões que o briefing original não cobria, tomadas durante o desenvolvimento
 - **Bases em um idioma só.** O aplicativo avisa se a base mistura português e inglês, porque as verificações dependem do idioma dominante. Um currículo importado em outro idioma que a base gera aviso, e uma experiência com a mesma empresa e o mesmo início de uma existente gera alerta na revisão. O aplicativo não junta experiências sozinho: a decisão de descartar ou aproveitar é sua.
 - **Instituições de ensino são traduzidas** para o idioma do currículo. Empresas, produtos e certificações não.
 - **Tempo verbal do cargo atual é livre**, desde que consistente dentro de cada experiência.
+- **Palavras-chave sustentadas vêm da análise, com os fatos.** O gerador só recebe o vocabulário da vaga para os termos que a base comprova (ids de fatos validados pelo código). Os demais vão numa lista "não use".
+- **O relatório separa o que o código prova do que a IA conta**, e a correspondência de termos aceita singular e plural.
 - **Espaço por experiência decidido pelo código e ajustável.** Parte de um limite por posição (mais recente, mais espaço). Experiências antigas (terminaram há mais de 10 anos, ou as 2 mais antigas de um histórico com ao menos 3 recentes) ficam com 1 bullet, a menos que a análise da vaga as torne relevantes (peso 2: um requisito obrigatório ou dois desejáveis apoiados nelas), caso em que ganham até 3. Recentes relevantes ganham 1 a mais, até o limite da mais recente. Limite 0 mostra só cargo, empresa e datas e não gera alerta de "buraco" no histórico, porque foi escolha sua. O modelo recebe o limite de cada experiência e a instrução de escrever um resumo denso quando o limite é baixo.
 - **Extrator conservador.** Só o que você afirmou vem marcado. Qualquer origem desconhecida conta como sugestão.
 - **Sem banco de dados, login ou servidor.** Tudo em arquivos locais.

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from src import config, exemplo, export, interview, registro, saidas, sessao, tailor
+from src import config, exemplo, export, interview, registro, relatorio, saidas, sessao, tailor
 from src.kb import ARQUIVOS_FATOS, KB, ErroBase
 from src.llm import LLM, Configuracao, ErroConfig, ErroLLM
 from src.texto import detectar_idioma, extrair_contato_local, ler_arquivo, palpite_nome
@@ -465,6 +465,18 @@ def secao_resultado(cfg: dict) -> None:
     cv = res.curriculo
     st.markdown("---")
     st.markdown("#### Resultado")
+    rel = res.relatorio
+    if rel:
+        o, p = rel["encaixe"]["obrigatorios"], rel["encaixe"]["palavras"]
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Obrigatórios cobertos", f"{o['coberto']} de {o['total']}")
+        c2.metric("Palavras-chave com respaldo", f"{p['percentual']}%")
+        c3.metric("Lacunas obrigatórias", o["lacuna"])
+        c4.metric("Pontos a conferir", len(cv.alertas))
+        with st.expander("Relatório da adaptação: como o currículo foi escrito para esta vaga", expanded=True):
+            st.markdown(relatorio.para_markdown(rel, com_titulo=False))
+            st.download_button("Baixar o relatório", relatorio.para_markdown(rel), file_name="relatorio.md",
+                               mime="text/markdown", key="dl_relatorio")
     if not res.verificacao_ia:
         st.warning("A verificação por IA não rodou nesta geração. Confira com mais atenção o que foi escrito.")
     if cv.alertas:
@@ -478,10 +490,6 @@ def secao_resultado(cfg: dict) -> None:
             for r in cv.removidos:
                 st.write(f"- {r['secao']}: {r['texto']}  ({r['motivo']})")
     mostrar_cobertura(res.cobertura)
-    if res.limites:
-        with st.expander("Como o espaço de cada experiência foi decidido"):
-            for v in res.limites.values():
-                st.write(f"- {v.get('rotulo', '')}: {v['limite']} bullet(s), {v['motivo']}")
     with st.expander("Rastro: de qual fato veio cada item"):
         for r in cv.rastro:
             st.write(f"- {r['texto']}  →  {', '.join(r['fontes_validas']) or 'sem fonte válida'}")
@@ -504,7 +512,8 @@ def secao_resultado(cfg: dict) -> None:
                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
     c3.download_button("Baixar Markdown", texto, file_name="curriculo.md", mime="text/markdown", key="dl_md")
     if st.button("Salvar na pasta de saídas", key="btn_salvar_saida"):
-        pasta = saidas.salvar_saida(texto, pdf, docx, st.session_state["vaga_analisada"], st.session_state["analise"])
+        pasta = saidas.salvar_saida(texto, pdf, docx, st.session_state["vaga_analisada"], st.session_state["analise"],
+                                    relatorio=relatorio.para_markdown(res.relatorio) if res.relatorio else None)
         st.success(f"Salvo em: {pasta}")
 
 

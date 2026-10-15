@@ -27,12 +27,15 @@ Devolva somente um JSON, sem texto antes ou depois, e escreva todo o conteúdo n
  "experiencias": [{"id": "slug", "bullets": [{"texto": "", "fontes": []}]}],
  "formacao": [{"texto": "", "fontes": []}],
  "certificacoes": [{"texto": "", "fontes": []}],
- "idiomas": [{"texto": "", "fontes": []}]}
+ "idiomas": [{"texto": "", "fontes": []}],
+ "adaptacao": {"estrategia": "", "mudancas": [{"onde": "", "o_que": "", "motivo": ""}], "deixou_de_fora": []}}
 ```
 
 - `titulo`: um cargo que a pessoa realmente teve ou o título padrão dela, nada além disso. Não promova
   ("Pleno" não vira "Sênior"). Se a pessoa informou um título para esta vaga, use exatamente esse.
 - `resumo`: respeite o limite de palavras informado. Cargo primeiro; tempo de experiência só se estiver na base.
+  O resumo é a parte MAIS adaptada à vaga: não copie o perfil da base. Escolha 2 ou 3 dos requisitos de maior peso
+  da vaga que a base comprova e abra com eles, usando o termo exato da vaga.
 - `competencias`: grupos curtos; `itens` é uma lista separada por vírgulas, do mais ao menos relevante para a
   vaga. Cada item precisa aparecer, com as mesmas palavras ou um sinônimo direto, em um fato que você citou
   em `fontes`. Nunca complete por afinidade: Excel não implica Google Sheets, "testou assuntos de e-mail" não
@@ -53,6 +56,30 @@ Devolva somente um JSON, sem texto antes ou depois, e escreva todo o conteúdo n
   Industrial Engineering" vira "Bacharelado em Engenharia Industrial"; "Federal University of São Carlos" vira
   "Universidade Federal de São Carlos"). Nomes de certificações, de programas e de empresas ficam como estão.
 - Omita (liste vazio) uma seção sem fatos. Não invente conteúdo para preenchê-la.
+- `adaptacao`: uma explicação PARA A CANDIDATA de como você adaptou o currículo a esta vaga. Escreva em português do
+  Brasil, qualquer que seja o idioma do currículo. Não faz parte do currículo e não pode acrescentar nenhum fato.
+  - `estrategia`: 2 a 4 frases: o que a vaga mais valoriza e o que você destacou por isso.
+  - `mudancas`: de 3 a 8 itens, os que mais pesaram. `onde` (Resumo, Competências ou o nome da empresa), `o_que`
+    (o que você reescreveu, reordenou ou priorizou, e quais palavras-chave da vaga usou) e `motivo`. Seja concreto
+    e honesto: só descreva o que você de fato fez no JSON acima.
+  - `deixou_de_fora`: requisitos ou palavras-chave da vaga que você NÃO usou por falta de fato na base, e fatos
+    que cortou por limite de espaço. Lista vazia se não houve.
+
+# Como adaptar à vaga
+
+A análise traz `palavras_chave_que_a_base_sustenta`, cada uma com os fatos que a sustentam, e
+`palavras_chave_sem_base_NAO_USE`. Seu trabalho é fazer o currículo falar o idioma da vaga SEM inventar:
+
+- **Alinhe o vocabulário.** Quando um fato diz a mesma coisa que uma palavra-chave sustentada com outras palavras,
+  escreva o bullet com o termo EXATO da vaga. Exemplo: o fato diz "squad multidisciplinar" e a vaga usa
+  "cross-functional": escreva "cross-functional squad". O significado não pode mudar: sinônimo direto sim,
+  conceito vizinho não.
+- **Priorize.** Em cada experiência, ponha primeiro os bullets que contêm palavras-chave sustentadas ou que
+  respondem a requisitos obrigatórios, e use o limite de espaço para eles.
+- **Respeite o que falta.** Nunca use uma palavra de `palavras_chave_sem_base_NAO_USE`, nem como competência, nem
+  no resumo, nem "de passagem". Se a vaga pede algo que a base não tem, deixe de fora.
+- Registre em `adaptacao.mudancas` o que você de fato fez, incluindo as trocas de vocabulário ("de X para Y").
+  Se o resumo ou um bullet ficou muito próximo do texto da base, diga isso em vez de afirmar que reescreveu.
 
 # Estilo
 

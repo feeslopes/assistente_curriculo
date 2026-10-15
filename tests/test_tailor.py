@@ -29,6 +29,12 @@ def analise_bruta():
             {"requisito": "Testes A/B", "tipo": "desejavel", "termo_na_vaga": "testes A/B",
              "status": "lacuna", "evidencias": [], "pergunta": "Já fez testes A/B?"},
         ],
+        "palavras_chave_base": [
+            {"termo": "Google Ads", "evidencias": ["habilidades#2", "id-falso#9"]},
+            {"termo": "SQL", "evidencias": ["habilidades#3"]},
+            {"termo": "HubSpot", "evidencias": ["id-falso#1"]},          # sem fato real: não é sustentada
+            {"termo": "termo que a vaga nao tem", "evidencias": ["habilidades#2"]},   # fora da lista de palavras-chave
+        ],
         "observacoes": "",
     }
 
@@ -51,6 +57,32 @@ class TestTailor(unittest.TestCase):
         self.assertEqual(r["Dashboards no Looker Studio"]["evidencias"], [])
         self.assertEqual(a["palavras_chave"].count("Google Ads"), 1)
         self.assertEqual(len(a["palavras_chave"]), 5)  # "google ads" duplicado caiu
+
+    def test_palavras_chave_sustentadas_so_valem_com_fato_real_e_termo_da_lista(self):
+        a = tailor.validar_analise(analise_bruta(), self.kb.ids_confirmados())
+        self.assertEqual([(p["termo"], p["evidencias"]) for p in a["palavras_chave_base"]],
+                         [("Google Ads", ["habilidades#2"]), ("SQL", ["habilidades#3"])])
+
+    def test_gerador_recebe_o_que_a_base_sustenta_e_o_que_nao_pode_usar(self):
+        llm = LLMFalso(gerado_bom())
+        a = tailor.validar_analise(analise_bruta(), self.kb.ids_confirmados())
+        tailor.gerar(llm, self.kb, VAGA_PT, a, "pt", self.cfg, verificar_ia=False)
+        usuario = llm.chamadas[0]["mensagens"][1]["content"]
+        self.assertIn("palavras_chave_que_a_base_sustenta", usuario)
+        self.assertIn("palavras_chave_sem_base_NAO_USE", usuario)
+        bloco = usuario.split("palavras_chave_sem_base_NAO_USE")[1].split("requisitos")[0]
+        self.assertIn("Looker Studio", bloco)          # a base não sustenta: proibido
+        self.assertNotIn("Google Ads", bloco)          # sustentada: pode usar
+        self.assertNotIn("SQL", bloco)
+        sistema = llm.chamadas[0]["mensagens"][0]["content"]
+        self.assertIn("Como adaptar à vaga", sistema)
+        self.assertIn("Alinhe o vocabulário", sistema)
+
+    def test_analise_sem_palavras_chave_base_continua_funcionando(self):
+        bruto = analise_bruta()
+        bruto.pop("palavras_chave_base")
+        a = tailor.validar_analise(bruto, self.kb.ids_confirmados())
+        self.assertEqual(a["palavras_chave_base"], [])
 
     def test_analise_recebe_so_confirmados(self):
         llm = LLMFalso(analise_bruta())
