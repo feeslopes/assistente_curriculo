@@ -113,6 +113,34 @@ class TestApp(unittest.TestCase):
         self.assertTrue(all((pastas[0] / f).exists() for f in ("curriculo.pdf", "curriculo.docx", "curriculo.md",
                                                                  "vaga.txt", "analise.json")))
 
+    def test_indice_aparece_no_resultado_e_o_historico_lista_a_vaga_salva(self):
+        self.usar_llm(analise_bruta(), gerado_bom(), {"problemas": [], "palavras": []})
+        self.st.valores["vaga_texto"] = VAGA_PT
+        self.st.cliques = {"btn_analisar"}
+        self.rodar()
+        self.st.cliques = {"btn_gerar"}
+        self.rodar()
+        self.st.cliques = set()
+        self.rodar()
+        self.assertIn("Índice de aderência à vaga", self.textos("markdown"))
+        metricas = {c[1][0]: c[1][1] for c in self.st.chamadas if c[0] == "metric"}
+        self.assertIn("Teto com a sua base atual", metricas)
+        self.assertIn("inventar", self.textos("info"))      # o aviso de que o índice não sobe por inventar
+        self.st.cliques = {"btn_salvar_saida"}
+        self.rodar()
+        pasta = next((self.tmp / "saidas").iterdir())
+        indice = json.loads((pasta / "indice.json").read_text(encoding="utf-8"))
+        self.assertTrue(0 <= indice["depois"] <= 100 and indice["teto"] >= indice["depois"])
+        self.st.cliques = set()
+        self.st.chamadas.clear()
+        self.rodar()
+        self.assertIn("Vagas salvas", self.textos("markdown"))
+        self.assertTrue(any(c[0] == "dataframe" and len(c[1][0]) == 1 for c in self.st.chamadas))
+
+    def test_historico_vazio_orienta_a_salvar(self):
+        self.rodar()
+        self.assertIn("Salvar na pasta de saídas", self.textos("info"))
+
     def test_chat_e_encerrar_rodada(self):
         proposta = {"propostas": [{"destino": "habilidades", "meta": {},
                                    "fatos": [{"texto": "Usa Notion para documentar processos.", "origem": "dito"}]}]}

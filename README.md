@@ -106,7 +106,7 @@ MODELO=
 
 ## Usando o aplicativo, passo a passo
 
-O aplicativo tem três abas.
+O aplicativo tem quatro abas.
 
 ### 3. Minha base (comece por aqui, ou pela entrevista)
 
@@ -157,6 +157,33 @@ Para cada currículo gerado, o aplicativo explica **como ele foi escrito para aq
 A estratégia vem da IA e pode errar ao descrever o que fez. Por isso o relatório sempre mostra o **fato da base ao lado do texto final**: você confere sozinho se o bullet foi só traduzido ou se foi realmente reescrito para a vaga.
 
 A adaptação em si funciona assim: a análise da vaga identifica quais palavras-chave a sua base sustenta (com os fatos que as sustentam) e quais não. O gerador recebe as duas listas, com a ordem de **usar o termo exato da vaga** onde um fato diz a mesma coisa com outras palavras ("squad multidisciplinar" vira "cross-functional squad" se a vaga usa esse termo), de **priorizar** os bullets com palavras-chave sustentadas e de **nunca usar** uma palavra sem base.
+
+### O índice de aderência (antes e depois)
+
+Logo abaixo de **Resultado** aparece o **índice de aderência à vaga**, de 0 a 100, com três números: **Antes** (o seu currículo-base, sem adaptação), **Depois** (o currículo gerado, que acompanha o que você edita) e o **Teto com a sua base atual**.
+
+**Isto não é a nota de nenhum ATS.** Essas notas não são públicas e cada sistema calcula a sua. É um índice nosso, calculado pelo código do mesmo jeito para os dois currículos:
+
+| Componente | Peso | O que conta |
+|---|---|---|
+| Palavras-chave da vaga | 45 | Só as que **a sua base sustenta** e que aparecem no texto. Palavra que a base não sustenta não pontua, mesmo que esteja escrita no currículo |
+| Requisitos obrigatórios | 30 | Coberto vale 1, parcial vale 0,5, e só quando o **fato que o sustenta está de fato no texto** |
+| Requisitos desejáveis | 10 | Igual aos obrigatórios |
+| Estrutura legível por ATS | 15 | Seções convencionais, contato no cabeçalho, páginas dentro do limite |
+
+Se a vaga não tem desejáveis, os outros pesos se reescalam. O **antes** é montado sem IA: os fatos confirmados na ordem da base, com os mesmos limites de espaço. O **teto** é o índice se o texto usasse tudo o que a sua base já sustenta; acima dele, só com fatos novos e verdadeiros.
+
+Por isso **o índice não sobe por inventar**: nenhum componente conta o que a base não comprova. O quadro **Como melhorar a aderência sem inventar** separa três tipos de ação:
+
+- **A base já sustenta, mas o texto não usa** (ganho garantido, é só incluir);
+- **Precisa confirmar** (só vale se você de fato fez; se não fez, deixe de fora);
+- **Estrutura** (contato faltando, página a mais).
+
+Cada item mostra o ganho aproximado em pontos. Se o currículo-base está num idioma e a vaga em outro, a comparação de palavras-chave é estimada pelos fatos que cada versão usa, e a tela avisa.
+
+### 4. Minhas vagas
+
+Cada currículo salvo com **Salvar na pasta de saídas** entra aqui, com o índice de antes, depois e teto (`indice.json` na pasta da vaga). A aba mostra um gráfico por vaga, a lista com data, empresa e notas, e permite reabrir qualquer uma (relatório, PDF, DOCX, Markdown). Ela também aponta **o que se repete nas vagas e a sua base não sustenta**: se um requisito ou uma palavra-chave aparece sem base em várias vagas, confirmar um fato verdadeiro sobre isso rende mais do que em qualquer vaga isolada. Se você não fez, deixe de fora.
 
 ### Como ler os alertas e a cobertura
 
@@ -226,6 +253,8 @@ flowchart LR
   subgraph Regras["Regras que o código impõe"]
     render["render.py: monta o Markdown e aplica as travas"]
     verify["verify.py: números, siglas, termos e cobertura"]
+    aderencia["aderencia.py: índice antes e depois, o que melhorar"]
+    historico["historico.py: vagas salvas e lacunas que se repetem"]
   end
   subgraph Infra["Infraestrutura"]
     llm["llm.py: cliente único, retry, máscara de contato"]
@@ -245,6 +274,11 @@ flowchart LR
   tailor --> llm
   tailor --> render
   tailor --> interview
+  tailor --> aderencia
+  app --> aderencia
+  app --> historico
+  aderencia --> render
+  aderencia --> verify
   render --> kb
   render --> verify
   export --> mdparse
@@ -555,6 +589,8 @@ Decisões que o briefing original não cobria, tomadas durante o desenvolvimento
 - **Palavras-chave sustentadas vêm da análise, com os fatos.** O gerador só recebe o vocabulário da vaga para os termos que a base comprova (ids de fatos validados pelo código). Os demais vão numa lista "não use".
 - **O relatório separa o que o código prova do que a IA conta**, e a correspondência de termos aceita singular e plural.
 - **Espaço por experiência decidido pelo código e ajustável.** Parte de um limite por posição (mais recente, mais espaço). Experiências antigas (terminaram há mais de 10 anos, ou as 2 mais antigas de um histórico com ao menos 3 recentes) ficam com 1 bullet, a menos que a análise da vaga as torne relevantes (peso 2: um requisito obrigatório ou dois desejáveis apoiados nelas), caso em que ganham até 3. Recentes relevantes ganham 1 a mais, até o limite da mais recente. Limite 0 mostra só cargo, empresa e datas e não gera alerta de "buraco" no histórico, porque foi escolha sua. O modelo recebe o limite de cada experiência e a instrução de escrever um resumo denso quando o limite é baixo.
+- **Índice de aderência próprio, nunca "nota de ATS".** Só conta palavra-chave que a base sustenta e requisito cujo fato de apoio está no texto, então inventar não sobe o número. O "antes" é o currículo-base montado sem IA. Quando vaga e currículo estão em idiomas diferentes, as palavras-chave são estimadas pelos fatos usados, e isso é dito na tela.
+- **Histórico em arquivos.** `indice.json` ao lado de cada currículo salvo; a aba Minhas vagas lê a pasta `saidas/`. Currículos salvos antes deste recurso aparecem sem índice.
 - **Extrator conservador.** Só o que você afirmou vem marcado. Qualquer origem desconhecida conta como sugestão.
 - **Sem banco de dados, login ou servidor.** Tudo em arquivos locais.
 

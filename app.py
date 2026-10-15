@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from src import config, exemplo, export, interview, registro, relatorio, saidas, sessao, tailor
+from src import aderencia, config, exemplo, export, historico, interview, registro, relatorio, saidas, sessao, tailor
 from src.kb import ARQUIVOS_FATOS, KB, ErroBase
 from src.llm import LLM, Configuracao, ErroConfig, ErroLLM
 from src.texto import detectar_idioma, extrair_contato_local, ler_arquivo, palpite_nome
@@ -457,7 +457,49 @@ def secao_geracao(kb: KB, cfg: dict) -> None:
             st.rerun()
 
 
-def secao_resultado(cfg: dict) -> None:
+def _paginas(markdown: str) -> int | None:
+    try:
+        return export.gerar_pdf(markdown)[1]
+    except Exception:  # texto editado que o exportador não aguenta: o aviso aparece mais abaixo
+        return None
+
+
+def mostrar_aderencia(comp: dict) -> None:
+    """Índice antes e depois, por componente, e o que ainda dá para melhorar (sem inventar)."""
+    antes, depois = comp["antes"], comp["depois"]
+    st.markdown("##### Índice de aderência à vaga")
+    st.caption("Não é a nota de nenhum ATS (essas notas não são públicas). É um índice nosso, de 0 a 100, calculado do "
+               "mesmo jeito para o currículo-base e para este, e que não sobe por inventar.")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Antes: seu currículo-base, sem adaptar", antes["total"])
+    c2.metric("Depois: este currículo", depois["total"], delta=depois["total"] - antes["total"])
+    c3.metric("Teto com a sua base atual", depois["teto"],
+              help="O índice se o texto usasse tudo o que a sua base já sustenta. Acima disso, só com fatos novos e verdadeiros.")
+    if comp["idioma_antes"] != comp["idioma_depois"]:
+        st.caption("O currículo-base está em outro idioma que este, então parte da diferença é só a tradução.")
+    if depois.get("estimado") or antes.get("estimado"):
+        st.caption("Vaga e currículo estão em idiomas diferentes: as palavras-chave foram estimadas pelos fatos que cada "
+                   "versão usa, não pelo texto.")
+    chaves = list(depois["componentes"])
+    rotulos = {k: f"{depois['componentes'][k]['rotulo']} ({depois['componentes'][k]['peso']:g}%)" for k in chaves}
+    # dicionário de dicionários: o Streamlit usa as chaves internas como nome de cada barra
+    df = {"Antes": {rotulos[k]: round(100 * antes["componentes"].get(k, {}).get("fracao", 0)) for k in chaves},
+          "Depois": {rotulos[k]: round(100 * depois["componentes"][k]["fracao"]) for k in chaves}}
+    st.bar_chart(df, horizontal=True)
+    st.caption("Cada barra é o quanto do componente foi atingido (0 a 100). Entre parênteses, o peso dele no índice.")
+    with st.expander("Como melhorar a aderência sem inventar"):
+        st.info(comp["aviso"])
+        if not comp["melhorias"]:
+            st.write("Nada a melhorar com o que a sua base tem hoje.")
+        for m in comp["melhorias"]:
+            ganho = "" if not m["ganho"] else (f" (+{m['ganho']} pontos)" if m["tipo"] != "confirmar"
+                                               else f" (até +{m['ganho']} pontos, só se for verdade)")
+            st.markdown(f"**{m['titulo']}**{ganho}")
+            st.caption(m["detalhe"])
+            st.write(", ".join(m["itens"]) if m["tipo"] != "estrutura" else "; ".join(m["itens"]))
+
+
+def secao_resultado(kb: KB, cfg: dict) -> None:
     res = st.session_state["resultado"]
     if res is None:
         return
@@ -465,6 +507,14 @@ def secao_resultado(cfg: dict) -> None:
     cv = res.curriculo
     st.markdown("---")
     st.markdown("#### Resultado")
+    comp = None
+    if res.aderencia:
+        # o índice acompanha o que você edita: usa o texto atual do editor (da execução anterior) e as páginas dele
+        atual = st.session_state.get(f"md_{gid}") or cv.markdown
+        depois = aderencia.calcular(st.session_state["analise"], atual, cv.rastro, kb, cfg,
+                                    res.aderencia["idioma_depois"], _paginas(atual))
+        comp = {**res.aderencia, "depois": depois, "melhorias": aderencia.melhorias(st.session_state["analise"], depois)}
+        mostrar_aderencia(comp)
     rel = res.relatorio
     if rel:
         o, p = rel["encaixe"]["obrigatorios"], rel["encaixe"]["palavras"]
@@ -513,7 +563,8 @@ def secao_resultado(cfg: dict) -> None:
     c3.download_button("Baixar Markdown", texto, file_name="curriculo.md", mime="text/markdown", key="dl_md")
     if st.button("Salvar na pasta de saídas", key="btn_salvar_saida"):
         pasta = saidas.salvar_saida(texto, pdf, docx, st.session_state["vaga_analisada"], st.session_state["analise"],
-                                    relatorio=relatorio.para_markdown(res.relatorio) if res.relatorio else None)
+                                    relatorio=relatorio.para_markdown(res.relatorio) if res.relatorio else None,
+                                    indice=historico.dados_do_indice(st.session_state["analise"], comp) if comp else None)
         st.success(f"Salvo em: {pasta}")
 
 
@@ -541,7 +592,65 @@ def aba_vaga(kb: KB, config_erro: str | None, cfg: dict) -> None:
     mostrar_analise(analise)
     secao_lacunas(kb, analise)
     secao_geracao(kb, cfg)
-    secao_resultado(cfg)
+    secao_resultado(kb, cfg)
+
+
+# ------------------------------------------------------------------------ 4. minhas vagas
+
+def aba_historico() -> None:
+    entradas = historico.listar()
+    if not entradas:
+        st.info("Quando você salvar um currículo na aba 2 (botão \"Salvar na pasta de saídas\"), ele aparece aqui, com o "
+                "índice de aderência de cada vaga.")
+        return
+    nomes: dict[str, str] = {}
+    for e in entradas:
+        base = f"{e['data']} {e['empresa'] or e['titulo_vaga'] or e['nome']}".strip()[:38]
+        nomes[e["nome"]] = base if base not in nomes.values() else f"{base} ({e['nome'][-3:]})"
+    com_indice = [e for e in entradas if e["tem_indice"]]
+    if com_indice:
+        st.markdown("#### Aderência por vaga")
+        st.caption("Antes e depois da adaptação, e o teto que a sua base permite hoje. Vagas salvas antes deste recurso "
+                   "aparecem na lista, mas sem índice.")
+        df = {"Antes": {nomes[e["nome"]]: e["antes"] for e in com_indice},
+              "Depois": {nomes[e["nome"]]: e["depois"] for e in com_indice},
+              "Teto com a base": {nomes[e["nome"]]: e["teto"] for e in com_indice}}
+        st.bar_chart(df, horizontal=True)
+    st.markdown("#### Vagas salvas")
+    st.dataframe([{"Data": e["data"], "Empresa": e["empresa"], "Vaga": e["titulo_vaga"], "Idioma": e["idioma"].upper(),
+                   "Antes": e["antes"], "Depois": e["depois"], "Teto": e["teto"]} for e in entradas], hide_index=True)
+
+    rec = historico.lacunas_recorrentes(entradas)
+    if rec["palavras"] or rec["requisitos"]:
+        st.markdown("#### O que se repete nas vagas e a sua base não sustenta")
+        st.caption("Estes pontos apareceram em mais de uma vaga sem respaldo na sua base. Se você realmente fez isso, "
+                   "confirmar o fato (aba 1 ou 3) rende mais do que em qualquer vaga isolada. Se não fez, deixe de fora: "
+                   "não adianta inventar para cobrir o requisito.")
+        if rec["requisitos"]:
+            st.write("Requisitos obrigatórios em lacuna: " + ", ".join(f"{t} ({n} vagas)" for t, n in rec["requisitos"]))
+        if rec["palavras"]:
+            st.write("Palavras-chave sem base: " + ", ".join(f"{t} ({n} vagas)" for t, n in rec["palavras"]))
+
+    st.markdown("#### Abrir uma vaga")
+    escolhida = st.selectbox("Vaga", [e["nome"] for e in entradas], format_func=lambda n: nomes[n], key="hist_vaga")
+    e = next(x for x in entradas if x["nome"] == escolhida)
+    pasta = e["pasta"]
+    st.caption(f"Pasta: {pasta}")
+    if e["tem_indice"]:
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Antes", e["antes"])
+        c2.metric("Depois", e["depois"], delta=e["depois"] - e["antes"])
+        c3.metric("Teto com a base", e["teto"])
+    for arquivo, rotulo, mime in (("curriculo.pdf", "Baixar PDF", "application/pdf"),
+                                  ("curriculo.docx", "Baixar DOCX",
+                                   "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+                                  ("curriculo.md", "Baixar Markdown", "text/markdown")):
+        if (pasta / arquivo).exists():
+            st.download_button(rotulo, (pasta / arquivo).read_bytes(), file_name=arquivo, mime=mime,
+                               key=f"hist_dl_{arquivo}")
+    if (pasta / "relatorio.md").exists():
+        with st.expander("Relatório da adaptação desta vaga"):
+            st.markdown((pasta / "relatorio.md").read_text(encoding="utf-8"))
 
 
 # ------------------------------------------------------------------------ 3. base
@@ -699,13 +808,16 @@ def main() -> None:
         st.title("Currículo sob medida")
         st.caption("Nada entra no currículo sem um fato que você confirmou. A IA propõe, você decide.")
         mostrar_mensagem()
-        aba1, aba2, aba3 = st.tabs(["1. Entrevista", "2. Currículo para uma vaga", "3. Minha base"])
+        aba1, aba2, aba3, aba4 = st.tabs(["1. Entrevista", "2. Currículo para uma vaga", "3. Minha base",
+                                          "4. Minhas vagas"])
         with aba1:
             aba_entrevista(kb, config_erro)
         with aba2:
             aba_vaga(kb, config_erro, cfg)
         with aba3:
             aba_base(kb)
+        with aba4:
+            aba_historico()
     finally:
         # o finally também roda quando st.rerun() interrompe o script: nada digitado se perde
         persistir(kb)
