@@ -604,4 +604,4 @@ Decisões que o briefing original não cobria, tomadas durante o desenvolvimento
 
 ## Licença
 
-Defina a licença antes de publicar. Sem um arquivo `LICENSE`, ninguém além de você tem permissão de uso por padrão.
+[MIT](LICENSE). Você pode usar, copiar e modificar o código, mantendo o aviso de copyright. O software é entregue como está, sem garantia: **o currículo gerado é responsabilidade de quem o envia**, e a IA pode errar mesmo com as travas do aplicativo.

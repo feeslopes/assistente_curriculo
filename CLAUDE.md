@@ -1,12 +1,12 @@
 # Currículo sob medida: briefing do projeto
 
 Este arquivo é o briefing completo. Leia inteiro antes de escrever código. Ele foi montado a partir
-de uma conversa longa com o Felipe, então as decisões da seção 2 já foram tomadas e os fatos da
+de uma conversa longa com o responsável pelo projeto, então as decisões da seção 2 já foram tomadas e os fatos da
 seção 3 já foram verificados em 12/10/2026 (confira de novo o que está marcado como "verificar").
 
 ## 1. Objetivo
 
-O Felipe (Product Manager, São Paulo) está ajudando a irmã a conseguir emprego. Precisamos de um app
+O responsável pelo projeto está ajudando uma pessoa próxima a conseguir emprego. Precisamos de um app
 que rode **local, na máquina dela**, em duas fases:
 
 1. **Entrevista.** Um chat que conversa com ela, descobre com precisão o que ela fez na vida
@@ -16,9 +16,9 @@ que rode **local, na máquina dela**, em duas fases:
    personalizado em Markdown, no idioma que ela escolher (PT ou EN), totalmente amigável a ATS,
    exportado em PDF e DOCX.
 
-Quem vai usar: a irmã do Felipe, que provavelmente **não usa terminal**. A área profissional dela
-não foi informada, então o app tem que ser agnóstico de área. Os currículos do Felipe (Product
-Manager) servem só como referência de formato.
+Quem vai usar: uma pessoa que provavelmente **não usa terminal**. A área profissional dela
+não foi informada, então o app tem que ser agnóstico de área. Os currículos do responsável pelo
+projeto servem só como referência de formato.
 
 O repositório pode ir para o GitHub com README. **Nunca versionar dado pessoal** (base, saídas, .env).
 
@@ -85,7 +85,7 @@ Os arquivos marcados com (semente) já existem neste kit. O resto é para você 
 ```
 curriculo-ia/
   CLAUDE.md                  este briefing
-  README.md                  para a irmã do Felipe, não técnico
+  README.md                  para quem vai usar, não técnico
   requirements.txt           (semente)
   .env.example  .gitignore   (semente)
   config.yaml                (semente) limites e ordem das seções
@@ -109,7 +109,7 @@ curriculo-ia/
   saidas/                    currículos gerados (gitignored)
   exemplo/                   base fictícia + vaga de exemplo, para testar e demonstrar
   tests/                     unittest com LLM falso
-  referencia/cv.css          (semente) aparência do currículo atual do Felipe, só como referência visual
+  referencia/cv.css          (semente) aparência de um currículo de referência, só como referência visual
 ```
 
 Stack: Python 3.10+, `streamlit`, `requests` (sem o pacote `openai`: o contrato é simples e fica testável
@@ -247,7 +247,7 @@ Formação, idiomas e habilidades seguem o mesmo padrão, por exemplo
    área editável. Botão exporta PDF, DOCX e MD **do texto editado**. Salvar em `saidas/<data>-<empresa>-<vaga>/`
    junto com a vaga e a análise. Mostrar número de páginas e avisar se passar de `max_paginas`.
 
-Layout do Markdown gerado (é o mesmo que o Felipe já usa nos `.qmd` dele):
+Layout do Markdown gerado (é o mesmo formato dos `.qmd` do responsável pelo projeto):
 
 ```markdown
 # Nome Sobrenome  
@@ -294,7 +294,7 @@ Muitos parsers de PDF perdem o destino do link e ficam só com a palavra "Linked
   `_itálico_`, links. Link `[texto](url)` vira `texto (url)` no PDF.
 - Aparência de referência: `referencia/cv.css` (fonte de 11,2 pt, entrelinha 1,48, margens 14 mm por 12 mm, cargo em
   semibold cinza). Replicar o clima, não o CSS.
-- Opcional, depois do MVP: motor alternativo `pandoc` + `wkhtmltopdf` (é o fluxo atual do Felipe com Quarto). Não é o
+- Opcional, depois do MVP: motor alternativo `pandoc` + `wkhtmltopdf` (é o fluxo atual do responsável pelo projeto com Quarto). Não é o
   padrão porque é difícil de instalar para quem não é técnico.
 - Teste de ATS no `verificar.py`: gerar o PDF e extrair o texto com `pypdf`. O nome e as seções têm que aparecer.
 
@@ -330,7 +330,7 @@ timeout). Cobrir no mínimo:
 - Teste de fumaça do `app.py` com um módulo `streamlit` falso (stub), só para pegar erro de import, nome e desempacotamento.
   O comportamento real do Streamlit precisa ser conferido **rodando o app**.
 
-Critérios de aceite do MVP (rodar de verdade, com chave real, na máquina do Felipe):
+Critérios de aceite do MVP (rodar de verdade, com chave real, na máquina do responsável pelo projeto):
 
 1. `python verificar.py` passa do começo ao fim e `--modelos` lista modelos.
 2. Importar um currículo de exemplo, rodar uma rodada de entrevista, revisar e salvar: aparecem arquivos em `base/`
@@ -364,18 +364,18 @@ Critérios de aceite do MVP (rodar de verdade, com chave real, na máquina do Fe
 
 ## 12. Ordem de trabalho, com pontos de parada
 
-Trabalhe em marcos pequenos. **Pare e mostre ao Felipe ao fim de M3 e de M5.**
+Trabalhe em marcos pequenos. **Pare e mostre ao responsável pelo projeto ao fim de M3 e de M5.**
 
-- **M0. Preparação (30 min).** Instalar dependências em um venv. Rodar uma chamada real em cada provedor que o Felipe tiver
+- **M0. Preparação (30 min).** Instalar dependências em um venv. Rodar uma chamada real em cada provedor em que o responsável tiver
   chave, listar modelos, confirmar o que está marcado como "verificar" na seção 3 e **corrigir os padrões em `llm.py`,
-  `.env.example` e README**. Perguntar ao Felipe só o que bloquear: ele tem chave de Gemini, de DeepSeek ou das duas?
+  `.env.example` e README**. Perguntar ao responsável só o que bloquear: ele tem chave de Gemini, de DeepSeek ou das duas?
   Ela usa Windows ou Mac?
 - **M1. Núcleo testável.** `config.py`, `texto.py`, `llm.py`, `kb.py`, `verify.py` com testes.
 - **M2. Entrevista e importação.** `interview.py`, prompts do entrevistador e do extrator, máscara de contato.
 - **M3. Vaga e geração.** `tailor.py`, `render.py`, prompts do analisador e do gerador. Testar com a base de `exemplo/`
-  e uma vaga de exemplo, **com chave real**. Mostrar ao Felipe o Markdown gerado, os alertas e a cobertura.
+  e uma vaga de exemplo, **com chave real**. Mostrar ao responsável o Markdown gerado, os alertas e a cobertura.
 - **M4. Exportação.** `mdparse.py`, `export.py`, `verificar.py`, testes de PDF e DOCX.
-- **M5. Interface.** `app.py` e o stub de teste. Rodar de verdade e mostrar ao Felipe.
+- **M5. Interface.** `app.py` e o stub de teste. Rodar de verdade e mostrar ao responsável.
 - **M6. Entrega.** README para não técnicos, scripts de início, `exemplo/` completo, revisão de privacidade
   (nada pessoal no Git), passada de limpeza.
 
