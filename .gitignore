@@ -25,3 +25,10 @@ exemplo/vagas/*
 
 # Nota do kit original (instruções para iniciar o projeto no Claude Code); não faz parte do repositório
 COMECE_AQUI.md
+
+# Atualização automática (estado local da instalação)
+backups/
+.versao_instalada
+.manifesto
+.atualizacao.json
+*.novo

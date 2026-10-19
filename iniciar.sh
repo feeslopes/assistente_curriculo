@@ -16,6 +16,13 @@ if [ ! -f ".venv/.instalado" ]; then
   echo ok > .venv/.instalado
 fi
 
+# Versao nova publicada? Atualiza sozinho, sem mexer no seu historico (base, saidas e .env)
+.venv/bin/python atualizar.py
+if [ -f "iniciar.sh.novo" ]; then
+  mv -f iniciar.sh.novo iniciar.sh   # mv troca o arquivo sem mexer no que o bash esta lendo agora
+  exec bash iniciar.sh
+fi
+
 if [ ! -f ".env" ]; then
   cp .env.example .env
   echo "Criei o arquivo .env. Abra-o em um editor de texto, cole a sua chave, salve e rode este script de novo."

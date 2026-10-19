@@ -14,7 +14,7 @@ from __future__ import annotations
 import streamlit as st
 
 from interface import comum, estilo, inicio, painel, perfil, vaga, vagas
-from src import config, exemplo
+from src import atualizador, config, exemplo
 from src.kb import KB
 
 
@@ -30,6 +30,8 @@ def configuracoes(kb: KB, cfg_provedor, config_erro: str | None) -> None:
                     st.success("Funcionando.")
         else:
             st.warning(config_erro)
+        st.caption(f"Versão instalada: {atualizador.versao_local(config.RAIZ)}. Versões novas são instaladas "
+                   "sozinhas ao abrir pelo iniciar.")
         st.caption(f"Seu histórico: {kb.base}")
         st.caption(f"Currículos gerados: {config.saidas_dir()}")
         if kb.vazia() and st.button("Carregar dados de exemplo", key="btn_exemplo_cfg"):

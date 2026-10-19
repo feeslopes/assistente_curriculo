@@ -25,14 +25,23 @@ if not exist ".venv\.instalado" (
   echo ok> ".venv\.instalado"
 )
 
-rem 3) Chave de API
+rem 3) Versao nova publicada? Atualiza sozinho, sem mexer no seu historico (base, saidas e .env)
+".venv\Scripts\python.exe" atualizar.py
+if exist "iniciar.bat.novo" (
+  rem o Windows le este arquivo aos pedacos: a troca e a reabertura ficam num bloco so
+  move /y "iniciar.bat.novo" "iniciar.bat" >nul
+  call "%~f0"
+  exit /b
+)
+
+rem 4) Chave de API
 if not exist ".env" (
   copy ".env.example" ".env" >nul
   echo Vai abrir o arquivo .env no Bloco de Notas. Cole a sua chave, salve e feche o Bloco de Notas.
   start /wait notepad ".env"
 )
 
-rem 4) Abrir o aplicativo
+rem 5) Abrir o aplicativo
 echo Abrindo o aplicativo no navegador. Para encerrar, feche esta janela.
 ".venv\Scripts\python.exe" -m streamlit run app.py
 pause
