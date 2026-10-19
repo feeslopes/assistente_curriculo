@@ -267,55 +267,59 @@ C4Container
   Rel(logica, ia, "Pede texto, com contato mascarado", "HTTPS")
 ```
 
-### Componentes (C4, nível 3: dentro da pasta `src`)
+### Componentes (C4, nível 3: pastas `interface` e `src`)
 
 O C4 oficial para este nível usa um diagrama experimental. Aqui está o equivalente em fluxograma, que renderiza em qualquer lugar.
 
 ```mermaid
 flowchart LR
-  subgraph UI["Interface"]
-    app["app.py e interface/: áreas, cartões, passos, gráficos"]
+  subgraph UI["Interface (pasta interface)"]
+    app["app.py: menu e roteamento"]
+    telas["inicio, painel, perfil, vaga, geral, vagas: as telas"]
+    apoio["revisao, comum, estilo: conferência em cartões, estado, gráficos"]
   end
   subgraph Fluxos["Fluxos de negócio"]
-    interview["interview.py: entrevista, extração e revisão"]
-    tailor["tailor.py: análise, lacunas, geração, fiscal por IA, tradução de cargos"]
+    interview["interview.py: entrevista, extração, duplicatas"]
+    tailor["tailor.py: análise, geração, segunda tentativa, fiscal, currículo geral"]
   end
   subgraph Regras["Regras que o código impõe"]
     render["render.py: monta o Markdown e aplica as travas"]
     verify["verify.py: números, siglas, termos e cobertura"]
     aderencia["aderencia.py: índice antes e depois, o que melhorar"]
-    historico["historico.py: vagas salvas e lacunas que se repetem"]
+  end
+  subgraph Dados["Arquivos"]
+    kb["kb.py: base em Markdown, ids dos fatos"]
+    historico["historico.py: candidaturas salvas e lacunas que se repetem"]
+    candidaturas["candidaturas.py: situação, sugestões e taxas"]
+    saidas["saidas.py: pastas Empresa_AAAA-MM"]
   end
   subgraph Infra["Infraestrutura"]
     llm["llm.py: cliente único, retry, máscara de contato"]
-    kb["kb.py: base em Markdown, ids dos fatos"]
     texto["texto.py: idioma, JSON, leitura de PDF e DOCX, datas"]
-    mdparse["mdparse.py: lê o Markdown do currículo"]
-    export["export.py: PDF e DOCX"]
-    saidas["saidas.py e exemplo.py"]
+    export["export.py e mdparse.py: PDF e DOCX"]
     config["config.py: caminhos, config.yaml, prompts"]
   end
-  app --> interview
-  app --> tailor
-  app --> export
-  app --> saidas
+  app --> telas
+  telas --> apoio
+  telas --> interview
+  telas --> tailor
+  telas --> aderencia
+  telas --> historico
+  telas --> candidaturas
+  telas --> export
+  telas --> saidas
   interview --> llm
   interview --> kb
   tailor --> llm
   tailor --> render
-  tailor --> interview
   tailor --> aderencia
-  app --> aderencia
-  app --> historico
   aderencia --> render
   aderencia --> verify
   render --> kb
   render --> verify
-  export --> mdparse
+  historico --> candidaturas
   llm --> texto
   kb --> texto
-  interview --> texto
-  render --> texto
   interview --> config
   tailor --> config
 ```
@@ -332,20 +336,23 @@ flowchart TD
   C -- "não" --> X1
   C -- "sim" --> D{"Os números do item<br/>existem na base?"}
   D -- "não" --> W1["Alerta: confira o número"]
-  D -- "sim" --> E
-  W1 --> E{"É um termo de competência?"}
-  E -- "sim" --> F{"O termo tem respaldo?<br/>(palavras da base ou veredito da IA fiscal)"}
-  F -- "não" --> X2["Termo removido e listado"]
+  D -- "sim" --> I
+  W1 --> I{"Está no idioma<br/>do currículo?"}
+  I -- "não" --> W3["Alerta: trecho no idioma errado"]
+  I -- "sim" --> E
+  W3 --> E{"É um termo ou nome<br/>de grupo de competências?"}
+  E -- "sim" --> F{"Tem respaldo?<br/>(palavras da base, termo ligado a um fato pela análise,<br/>ou veredito da IA fiscal)"}
+  F -- "não" --> X2["Termo removido, ou nome do grupo tirado"]
   F -- "sim" --> G
   E -- "não" --> H{"A IA fiscal achou<br/>um exagero na frase?"}
-  H -- "sim" --> W2["Alerta com o motivo<br/>(a frase fica, você decide)"]
+  H -- "sim" --> W2["Alerta com o motivo<br/>(a frase fica, você decide,<br/>mas ela não conta no índice)"]
   H -- "não" --> G["Entra no currículo"]
   W2 --> G
 ```
 
 Além disso, o código garante que **empresa, cargo, datas e local vêm sempre da sua base**, nunca da IA, que o título abaixo do nome é um cargo seu (ou o título que você digitar), e que uma experiência que a IA deixar de fora gera aviso.
 
-### Sequência 1: entrevista e revisão
+### Sequência 1: conversa e conferência
 
 ```mermaid
 sequenceDiagram
@@ -356,7 +363,7 @@ sequenceDiagram
   participant IA as Provedor de IA
 
   V->>UI: Abre Meu histórico, Conversar para completar
-  UI-->>V: Mostra uma abertura fixa, sem chamar a IA
+  UI-->>V: Mostra uma abertura fixa, sem chamar a IA, com o que ainda falta
   loop A cada resposta sua
     V->>UI: Escreve a resposta
     UI->>L: responder
@@ -370,14 +377,14 @@ sequenceDiagram
   UI->>L: extrair_da_conversa
   L->>IA: Instruções do extrator e a conversa
   IA-->>L: Propostas de fatos, em JSON
-  L->>L: Descarta repetidos, contato e mês inventado. Avisa se a IA traduziu
+  L->>L: Descarta repetidos e contato. Mês inventado vira só o ano. Avisa duplicata e idioma diferente
   L-->>UI: Propostas
-  UI-->>V: Tela de revisão: o que você disse vem marcado, sugestão da IA vem desmarcada
-  V->>UI: Marca o que é verdade e salva
-  UI->>K: Grava como confirmado, ou como pendente
+  UI-->>V: Conferência em cartões: o que você disse vem marcado, sugestão da IA vem desmarcada
+  V->>UI: Clica em Salvar
+  UI->>K: Marcado vira confirmado, desmarcado fica a confirmar. Tudo ou nada
 ```
 
-### Sequência 2: importar um currículo existente
+### Sequência 2: ler um currículo existente
 
 ```mermaid
 sequenceDiagram
@@ -391,7 +398,7 @@ sequenceDiagram
   V->>UI: Envia o arquivo (PDF, DOCX, MD ou TXT)
   UI->>T: Extrai o texto do arquivo
   T-->>UI: Texto
-  UI->>T: Procura e-mail, telefone e LinkedIn com regex, no seu computador
+  UI->>T: Procura nome, e-mail, telefone e LinkedIn, no seu computador
   T-->>UI: Contato encontrado
   UI->>K: Preenche o contato.yaml, só os campos que estavam vazios
   UI->>L: extrair
@@ -399,35 +406,39 @@ sequenceDiagram
   L->>IA: Instruções do extrator e o texto sem contato
   IA-->>L: Propostas de fatos, em JSON
   L-->>UI: Propostas validadas
-  UI-->>V: Tela de revisão, igual à da entrevista
+  UI-->>V: Confira o que eu entendi: seus dados (para corrigir) e cada experiência num cartão
+  V->>UI: Salvar
+  UI->>K: Grava contato e fatos
+  UI-->>V: Leva ao Início
 ```
 
-### Sequência 3: analisar a vaga e responder as lacunas
+### Sequência 3: analisar a vaga e responder às lacunas
 
 ```mermaid
 sequenceDiagram
   actor V as Você
   participant UI as Interface
-  participant L as Lógica (tailor)
+  participant L as Lógica (tailor e aderencia)
   participant K as Base (arquivos)
   participant IA as Provedor de IA
 
-  V->>UI: Cola o texto da vaga e clica em Analisar
+  V->>UI: Novo currículo, Para uma vaga: cola o texto e clica em Analisar
   UI->>L: analisar
   L->>K: Lê só os fatos confirmados, cada um com seu id
   L->>IA: Instruções do analisador, a vaga e os fatos
   IA-->>L: Requisitos, status, evidências e palavras-chave, em JSON
   L->>L: Descarta ids inexistentes. Coberto sem evidência vira parcial
-  L-->>UI: Análise validada
-  UI-->>V: Requisitos cobertos, parciais e lacunas, com perguntas
-  V->>UI: Responde só o que é verdade, ou marca Não tenho essa experiência
+  L->>L: Pontuação do currículo de hoje, sem adaptar (só código)
+  L-->>UI: Análise validada e pontuação de hoje
+  UI-->>V: Encaixe: comprovado, em parte e não aparece, com a pergunta ao lado de cada lacuna
+  V->>UI: Responde só o que é verdade, ou marca Não tenho
   UI->>L: extrair_respostas, sem as respostas vazias ou negadas
   L->>IA: Instruções do extrator e as respostas
   IA-->>L: Propostas de fatos
-  UI-->>V: Tela de revisão
-  V->>UI: Confirma e salva
+  UI-->>V: Conferência em cartões
+  V->>UI: Salvar
   UI->>K: Grava na base
-  V->>UI: Reanalisar com a base atualizada
+  UI->>L: Analisa de novo, sozinho, com o histórico atualizado
   Note over V,IA: Uma lacuna só vira texto depois que você confirma o fato
 ```
 
@@ -438,8 +449,9 @@ sequenceDiagram
   actor V as Você
   participant UI as Interface
   participant L as Lógica (tailor)
-  participant R as Regras (render)
+  participant R as Regras (render e aderencia)
   participant K as Base (arquivos)
+  participant S as Pasta saidas
   participant IA as Provedor de IA
 
   V->>UI: Escolhe o idioma e clica em Gerar
@@ -447,7 +459,6 @@ sequenceDiagram
     UI->>L: sugerir_traducoes dos cargos
     L->>IA: Cargos e locais sem tradução
     IA-->>L: Sugestões
-    UI-->>V: Mostra as sugestões
     V->>UI: Confirma ou edita
     UI->>K: Grava cargo_pt ou cargo_en
   end
@@ -456,18 +467,25 @@ sequenceDiagram
   L->>IA: Instruções do gerador, guidelines, limites, vaga, análise e fatos
   IA-->>L: Currículo em JSON, com os ids dos fatos em cada item
   L->>R: Primeira montagem
-  R->>R: Valida fontes, números, título e limites. Empresa, cargo e datas vêm da base
-  R-->>L: Texto, alertas e itens para conferir
-  L->>IA: Fiscal: cada item e os fatos que o sustentam, mais as palavras-chave da vaga
-  IA-->>L: Itens com exagero e classificação das palavras-chave
+  R->>R: Valida fontes, números, idioma, título e limites. Empresa, cargo e datas vêm da base
+  L->>IA: Fiscal: cada item, os fatos que o sustentam e os termos duvidosos da análise
+  IA-->>L: Veredito por item e por termo
   L->>R: Segunda montagem, aplicando o veredito
-  R-->>L: Currículo final, alertas e rastro
-  L-->>UI: Resultado e cobertura de palavras-chave
-  UI-->>V: Alertas, cobertura e texto editável
+  R->>R: Índice antes e depois (frases e termos rejeitados não contam)
+  opt A versão adaptada pontuou abaixo da sem adaptar
+    L->>IA: Segunda tentativa, com o que ficou de fora
+    IA-->>L: Nova versão, verificada do mesmo jeito
+    L->>L: Fica a melhor das duas
+  end
+  L-->>UI: Resultado, índice e alertas
+  UI->>S: Guarda sozinho em Empresa_AAAA-MM
+  UI-->>V: Aderência, currículo, o que mudou, como melhorar e o que conferir
   Note over L,IA: Se o fiscal falhar, o código volta às suas próprias regras e avisa
 ```
 
-### Sequência 5: exportar
+O **currículo geral** (Novo currículo, Geral, sem vaga) segue a mesma sequência a partir de "gerar", com uma análise vazia e o foco no lugar da vaga. Não há índice de aderência, e a pasta é `Geral_AAAA-MM`.
+
+### Sequência 5: exportar e editar
 
 ```mermaid
 sequenceDiagram
@@ -477,19 +495,36 @@ sequenceDiagram
   participant E as export
   participant S as Pasta saidas
 
-  V->>UI: Edita o texto do currículo na tela
-  UI->>M: parse do Markdown editado
+  UI->>M: parse do Markdown do currículo
   M-->>UI: Blocos: títulos, parágrafos, listas, negrito e itálico
-  UI->>E: gerar_pdf
-  E-->>UI: PDF e número de páginas
-  UI->>E: gerar_docx
-  E-->>UI: DOCX
-  UI-->>V: Avisa se passou do limite de páginas e mostra os botões de download
-  UI->>S: Guarda sozinho em Empresa_AAAA-MM: Curriculo_Nome.pdf, .docx e .md, vaga, análise, relatório e índice
-  opt Editou o texto
-    V->>UI: Clica em Salvar minha versão editada
-    UI->>S: Regrava os arquivos da mesma pasta
+  UI->>E: gerar_pdf e gerar_docx
+  E-->>UI: PDF, número de páginas e DOCX
+  UI-->>V: Pré-visualização, aviso de páginas e botões Baixar PDF e Baixar Word
+  opt Editou o texto ou escolheu a versão sem adaptar
+    V->>UI: Clica em Guardar esta versão
+    UI->>S: Regrava Curriculo_Nome.pdf, .docx e .md na mesma pasta
   end
+```
+
+### Sequência 6: acompanhar as candidaturas
+
+```mermaid
+sequenceDiagram
+  actor V as Você
+  participant UI as Interface (Início e Minhas candidaturas)
+  participant C as candidaturas.py
+  participant S as Pasta da vaga
+
+  V->>UI: Marca a situação no cartão (Enviado, Entrevista, Proposta...)
+  UI->>C: definir_situacao
+  C->>S: Grava candidatura.json, com a data de envio e o histórico
+  V->>UI: Abre o Início
+  UI->>C: sugerir_sem_retorno e resumo
+  C->>S: Lê as candidaturas
+  C-->>UI: Enviadas há mais de 21 dias sem resposta, contagens e taxas (só com dados suficientes)
+  UI-->>V: Próximas ações e andamento
+  V->>UI: Marcar sem retorno (um clique, se quiser)
+  Note over UI,C: O app só sugere. Nenhuma situação muda sozinha
 ```
 
 ### Como a base é organizada
@@ -501,6 +536,7 @@ base/
   habilidades.md  formacao.md  certificacoes.md  idiomas.md
   experiencias/
     empresa-cargo.md   um arquivo por cargo
+  .sessao/             conversa e conferências ainda não salvas
 ```
 
 Um arquivo de experiência tem um cabeçalho e os fatos:
@@ -511,15 +547,29 @@ tipo: experiencia
 empresa: Empresa Exemplo
 cargo: Analista de Marketing
 cargo_en: Marketing Analyst        # opcional: versão para currículos em inglês
-inicio: 2022-03                    # AAAA-MM
-fim: atual                         # AAAA-MM ou atual
+inicio: 2022-03                    # AAAA-MM, ou só AAAA se você não lembra o mês
+fim: atual                         # AAAA-MM, AAAA ou atual
 local: São Paulo, Brasil
 ocultar: false                     # true: esta experiência não entra em nenhum currículo
 ---
 - [confirmado] Estruturou o funil de aquisição de um produto com 12 mil usuários ativos.
+- [sugerido] Reduziu o custo por lead em cerca de 20%.
 ```
 
-O id de cada fato é `arquivo#n`, onde n é a posição da linha marcada no arquivo (por exemplo `empresa-cargo#2`). Os ids mudam se você remover um fato, por isso o aplicativo nunca guarda ids entre sessões.
+`[sugerido]` é o que aparece na tela como *a confirmar*: fica guardado, mas fora dos currículos. O id de cada fato é `arquivo#n`, onde n é a posição da linha marcada no arquivo (por exemplo `empresa-cargo#2`). Os ids mudam se você remover um fato, por isso o aplicativo nunca guarda ids entre sessões.
+
+E cada candidatura, em `saidas/`:
+
+```text
+saidas/
+  QuintoAndar_2026-10/
+    Curriculo_Ana_Souza.pdf  .docx  .md   o currículo (com _EN quando em inglês)
+    vaga.txt  analise.json                a vaga e a análise
+    relatorio.md  indice.json             o que mudou e a aderência
+    candidatura.json                      situação, data de envio e anotação
+  Geral_2026-10/                          currículo geral (sem candidatura)
+  logs/                                   registro das chamadas à IA
+```
 
 ### Quem garante o quê
 
@@ -531,13 +581,19 @@ O id de cada fato é `arquivo#n`, onde n é a posição da linha marcada no arqu
 | Empresa, cargo, datas e local vêm da base | Código (`render.py`) |
 | Título é um cargo seu ou o que você digitou | Código (`render.py`) |
 | Número do texto existe na base (`80 mil` e `80,000` são o mesmo) | Código (`verify.py`) |
-| Mês de uma data só vale se foi dito | Código (`interview.py`) |
+| Trecho no idioma errado vira alerta | Código (`render.py`) |
+| Mês de uma data só vale se foi dito; sem mês, fica só o ano | Código (`interview.py`) |
+| Salvar uma conferência é tudo ou nada | Código (`interview.py`) |
+| Experiência parecida com uma existente gera aviso | Código (`interview.py`) |
 | Contato nunca vai para a IA | Código (`llm.py`) |
-| Termo de competência tem respaldo | Código no mesmo idioma da base, **IA fiscal** quando o currículo é traduzido |
+| Termo de competência tem respaldo | Código no mesmo idioma da base, **IA fiscal** quando o currículo é traduzido ou o termo é um sinônimo |
 | Frase não exagera o que o fato diz | **IA fiscal** (só alerta, a decisão é sua) |
+| O índice não sobe por inventar | Código (`aderencia.py`), usando o veredito da IA fiscal |
+| A versão adaptada não fica abaixo da sem adaptar | Código (`tailor.py`): segunda tentativa e aviso |
 | Tradução fiel de cargos e nomes | **IA sugere, você confirma** |
+| Situação da candidatura | **Você marca**; o código só sugere "Sem retorno" |
 
-A IA fiscal é uma segunda chamada ao modelo. Ela dá um **veredito para cada item** (`ok`, `exagero` ou `sem_respaldo`), em vez de listar só os problemas: assim uma tradução fiel é `ok`, e o código ainda descarta qualquer apontamento que diga no próprio texto que o item está fiel. Ela reduz o risco, mas **não é prova**: nos testes ela errou para o lado seguro (removeu um termo bom em vez de deixar passar um inventado), mas a amostra é pequena.
+A IA fiscal é uma segunda chamada ao modelo. Ela dá um **veredito para cada item** (`ok`, `exagero` ou `sem_respaldo`), confere o resumo e os nomes de grupo de competências, e julga os termos que a análise ligou a fatos com outras palavras ("treinou 15 operadores" não é "gestão de equipes"). O código ainda descarta qualquer apontamento que diga no próprio texto que o item está fiel. Ela reduz o risco, mas **não é prova**: nos testes ela ainda deixou passar exageros leves de vez em quando.
 
 ---
 
@@ -567,15 +623,16 @@ A IA fiscal é uma segunda chamada ao modelo. Ela dá um **veredito para cada it
 ## Para quem desenvolve
 
 ```text
-app.py            interface Streamlit, fina, sem lógica de negócio
+app.py            menu e roteamento (Streamlit), sem lógica de negócio
+interface/        as telas: início, painel, histórico, vaga, currículo geral, candidaturas
 verificar.py      diagnóstico para rodar na máquina do usuário
 iniciar.bat       duplo clique no Windows
 iniciar.sh        Linux (e Mac): bash iniciar.sh
 prompts/          entrevistador, extrator, analisador, gerador, verificador, tradutor_cargos
-src/              ver o diagrama de componentes acima
+src/              regras e fluxos: ver o diagrama de componentes acima
 tests/            unittest, com LLM falso, sessão HTTP falsa e streamlit falso
 exemplo/          base fictícia e duas vagas de exemplo (base/ é copiada com um clique)
-config.yaml       limites e ordem das seções
+config.yaml       limites, ordem das seções e prazos do acompanhamento de candidaturas
 guidelines.md     regras de escrita lidas pela IA a cada geração
 ```
 
@@ -585,7 +642,7 @@ Rodar os testes (não usam rede nem chave):
 python -m unittest discover -s tests -t .
 ```
 
-O teste do `app.py` usa um Streamlit falso e só pega erro de import, de nome e de desempacotamento. O comportamento real da tela precisa ser conferido **rodando o aplicativo**.
+Os testes da interface usam um Streamlit falso: simulam cliques e conferem o que é mostrado e gravado, mas não o visual. O comportamento real da tela precisa ser conferido **rodando o aplicativo**. Para testar sem mexer nos seus dados, aponte `CV_BASE_DIR` para uma pasta de teste; lembre que gerar um currículo grava em `saidas/`.
 
 ### Antes de subir para o GitHub
 
@@ -600,7 +657,7 @@ Se você guardar currículos reais na pasta `exemplo/` para testar, eles ficam f
 
 O `.gitattributes` garante fim de linha LF no `iniciar.sh` e CRLF no `iniciar.bat`. Para o `iniciar.sh` ser executável direto no Linux depois de clonar: `chmod +x iniciar.sh` (ou use `bash iniciar.sh`).
 
-Cada chamada à IA é registrada em `saidas/logs/AAAA-MM-DD.jsonl`, uma linha por chamada, com `rotulo` (entrevistador, extrator, analisador, gerador, verificador, tradutor_cargos), modelo, duração, o que foi enviado **já mascarado** (sem telefone, e-mail, links nem os dados do contato), a resposta recebida e o erro, se houve. Serve para depurar e para melhorar os prompts: abra o arquivo, ache a chamada que deu errado e veja exatamente o que o modelo recebeu e respondeu. A aba **Minha base** mostra as últimas chamadas e permite baixar o registro do dia. A chave de API nunca é gravada. Para desligar, coloque `CV_LOG=0` no `.env`. **O registro contém o conteúdo da sua base e das suas conversas: apague a pasta `saidas/logs` antes de compartilhar o computador.**
+Cada chamada à IA é registrada em `saidas/logs/AAAA-MM-DD.jsonl`, uma linha por chamada, com `rotulo` (entrevistador, extrator, analisador, gerador, verificador, tradutor_cargos), modelo, duração, o que foi enviado **já mascarado** (sem telefone, e-mail, links nem os dados do contato), a resposta recebida e o erro, se houve. Serve para depurar e para melhorar os prompts: abra o arquivo, ache a chamada que deu errado e veja exatamente o que o modelo recebeu e respondeu. **Meu histórico**, seção **Avançado**, mostra as últimas chamadas e permite baixar o registro do dia. A chave de API nunca é gravada. Para desligar, coloque `CV_LOG=0` no `.env`. **O registro contém o conteúdo da sua base e das suas conversas: apague a pasta `saidas/logs` antes de compartilhar o computador.**
 
 A conversa em andamento e as revisões de fatos ainda não salvas ficam em `base/.sessao/sessao.json` e voltam quando o aplicativo abre de novo. O arquivo some quando não há mais nada pendente.
 

@@ -1,6 +1,8 @@
 # Currículo sob medida: briefing do projeto
 
-Este arquivo é o briefing completo. Leia inteiro antes de escrever código. Ele foi montado a partir
+Este arquivo é o briefing original. Leia inteiro antes de escrever código.
+
+**Estado atual:** o projeto já passou de todos os marcos e evoluiu além deste briefing (interface redesenhada em `interface/`, com Início, Novo currículo, Minhas candidaturas e Meu histórico; acompanhamento de candidaturas; currículo geral; só o DeepSeek documentado). Onde este texto divergir, valem o README (em especial "Escolhas registradas") e o código. As regras anti-invenção da seção 5 continuam valendo. Ele foi montado a partir
 de uma conversa longa com o responsável pelo projeto, então as decisões da seção 2 já foram tomadas e os fatos da
 seção 3 já foram verificados em 12/10/2026 (confira de novo o que está marcado como "verificar").
 
@@ -300,7 +302,7 @@ Muitos parsers de PDF perdem o destino do link e ficam só com a palavra "Linked
 
 ## 9. Interface (Streamlit)
 
-Três abas e uma barra lateral. A interface é fina: toda a lógica fica em `src/`.
+Desenho original (substituído; ver README): três abas e uma barra lateral. A interface é fina: toda a lógica fica em `src/`.
 
 - **Barra lateral:** provedor e modelo em uso, botão "Testar conexão", pasta de saída, e um expander "Testar com
   dados de exemplo" que copia `exemplo/` para `base/` **só se a base estiver vazia**.
