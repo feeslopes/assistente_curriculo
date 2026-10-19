@@ -10,7 +10,7 @@ import streamlit as st
 from src import candidaturas, historico
 from src.kb import KB
 
-from . import comum, estilo
+from . import comum
 
 
 def _acoes_principais() -> None:
@@ -122,21 +122,34 @@ def _andamento(entradas: list[dict], cfg: dict) -> None:
                        f"{r['faltam_para_relacao']}). Antes disso, ela pareceria uma conclusão sem ser.")
 
 
-def _lacunas_recorrentes(entradas: list[dict]) -> None:
-    rec = historico.lacunas_recorrentes([e for e in entradas if not e["geral"]])
-    if not (rec["palavras"] or rec["requisitos"]):
+def _onde_se_desenvolver(entradas: list[dict]) -> None:
+    """O que as vagas que ela busca pedem e o histórico não mostra: contar (se tem) ou desenvolver (se não tem)."""
+    p = historico.pontos_de_desenvolvimento(entradas)
+    if not p["itens"]:
         return
     with st.container(border=True):
-        st.markdown("**:material/repeat: O que várias vagas pedem e o seu histórico não mostra**")
-        st.caption("Se você fez isso, contar em Meu histórico melhora todas as próximas candidaturas. Se não fez, deixe "
-                   "de fora: inventar para cobrir um requisito aparece na entrevista.")
-        if rec["requisitos"]:
-            estilo.etiquetas([f"{t} · {n} vagas" for t, n in rec["requisitos"]], "tem")
-        if rec["palavras"]:
-            estilo.etiquetas([f"{t} · {n} vagas" for t, n in rec["palavras"]], "nao")
-        if st.button("Contar em Meu histórico", key="ini_lacunas", icon=":material/chat:"):
-            comum.ir_para("historico", vista="conversa")
-            st.rerun()
+        st.markdown("**:material/school: Onde se desenvolver para aumentar suas chances**")
+        origem = ("nas vagas em que você se candidatou" if p["base"] == "enviadas"
+                  else "nas vagas para as quais você gerou currículo (quando você marcar as enviadas, a conta passa a "
+                       "usar só elas)")
+        st.caption(f"O que mais se repete {origem} e o seu histórico não mostra. Base: {p['total']} vagas.")
+        linhas = []
+        for i in p["itens"]:
+            selo = " :orange-badge[obrigatório]" if i["obrigatorio"] else ""
+            linhas.append(f"- **{i['termo']}**{selo}: pedido em {i['vagas']} de {p['total']} vagas")
+        st.markdown("\n".join(linhas))
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Você já tem e não contou?**")
+            st.caption("Contar em Meu histórico melhora todas as próximas candidaturas de uma vez.")
+            if st.button("Contar em Meu histórico", key="ini_lacunas", icon=":material/chat:"):
+                comum.ir_para("historico", vista="conversa")
+                st.rerun()
+        with c2:
+            st.markdown("**Ainda não tem?**")
+            st.caption("São os pontos que mais pesam nas vagas que você busca. Um curso, um projeto pessoal ou uma tarefa "
+                       "no trabalho atual podem virar uma experiência verdadeira para contar depois. Até lá, fica de fora "
+                       "do currículo: inventar aparece na entrevista.")
 
 
 def area(kb: KB, cfg: dict, config_erro: str | None) -> None:
@@ -148,7 +161,7 @@ def area(kb: KB, cfg: dict, config_erro: str | None) -> None:
     _acoes_principais()
     _proximas_acoes(kb, entradas, cfg)
     _andamento(entradas, cfg)
-    _lacunas_recorrentes(entradas)
+    _onde_se_desenvolver(entradas)
     exps = kb.experiencias()
     if exps and exps[0].meta["fim"] == "atual":
         c1, c2 = st.columns([4, 1.2], vertical_alignment="center")

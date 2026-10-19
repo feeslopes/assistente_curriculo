@@ -545,6 +545,23 @@ class TestApp(unittest.TestCase):
         from src import candidaturas
         self.assertEqual(candidaturas.ler(pasta)["situacao"], "sem_retorno")
 
+    def test_inicio_mostra_onde_se_desenvolver(self):
+        self.gerar_para_a_vaga(analise_bruta(), gerado_bom(), FISCAL_OK, gerado_bom(), FISCAL_OK)
+        self.clicar("btn_outra_vaga")                    # segunda vaga, com as mesmas lacunas
+        self.st.valores["vaga_texto"] = VAGA_PT + "\nOutra empresa."
+        self.clicar("btn_analisar")
+        self.st.valores.pop("vaga_texto")
+        self.clicar("btn_para_gerar")
+        self.clicar("btn_gerar")
+        self.ir("inicio")
+        self.st.chamadas.clear()
+        self.rodar()
+        texto = self.textos("markdown")
+        self.assertIn("Onde se desenvolver para aumentar suas chances", texto)
+        self.assertIn("Looker Studio", texto)
+        self.assertIn("pedido em 2 de 2 vagas", texto)
+        self.assertIn("Ainda não tem?", texto)
+
     def test_taxa_de_resposta_nao_aparece_com_poucos_dados(self):
         self.gerar_para_a_vaga()
         self.ir("inicio")

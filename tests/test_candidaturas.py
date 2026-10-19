@@ -82,6 +82,40 @@ class TestResumo(unittest.TestCase):
         self.assertEqual(r["enviadas"], 1)
 
 
+def vaga_com_lacunas(situacao, palavras, sustentadas=(), obrigatorios=()):
+    analise = {"palavras_chave": list(palavras),
+               "palavras_chave_base": [{"termo": t, "evidencias": ["x#1"]} for t in sustentadas],
+               "requisitos": [{"requisito": r, "termo_na_vaga": r, "tipo": "obrigatorio", "status": "lacuna"}
+                              for r in obrigatorios]}
+    return {"situacao": situacao, "geral": False, "analise": analise}
+
+
+class TestOndeSeDesenvolver(unittest.TestCase):
+    def test_usa_as_enviadas_quando_ha_pelo_menos_duas(self):
+        es = [vaga_com_lacunas("enviado", ["SQL", "Excel"], sustentadas=["Excel"]),
+              vaga_com_lacunas("entrevista", ["SQL", "Power BI"]),
+              vaga_com_lacunas("gerado", ["Power BI"]), vaga_com_lacunas("gerado", ["Power BI"])]
+        p = historico.pontos_de_desenvolvimento(es)
+        self.assertEqual((p["base"], p["total"]), ("enviadas", 2))
+        self.assertEqual([(i["termo"], i["vagas"]) for i in p["itens"]], [("SQL", 2)])   # Power BI só nas não enviadas
+
+    def test_sem_enviadas_usa_as_geradas(self):
+        es = [vaga_com_lacunas("gerado", ["Power BI"]), vaga_com_lacunas("gerado", ["Power BI"])]
+        p = historico.pontos_de_desenvolvimento(es)
+        self.assertEqual((p["base"], p["total"]), ("geradas", 2))
+        self.assertEqual(p["itens"][0]["termo"], "Power BI")
+
+    def test_obrigatorio_primeiro_no_empate_e_sem_repetir_o_termo(self):
+        es = [vaga_com_lacunas("enviado", ["Looker Studio", "CRO"], obrigatorios=["Looker Studio"]),
+              vaga_com_lacunas("enviado", ["Looker Studio", "CRO"], obrigatorios=["Looker Studio"])]
+        itens = historico.pontos_de_desenvolvimento(es)["itens"]
+        self.assertEqual([(i["termo"], i["obrigatorio"]) for i in itens], [("Looker Studio", True), ("CRO", False)])
+
+    def test_curriculo_geral_nao_entra(self):
+        es = [{"situacao": "gerado", "geral": True, "analise": {"palavras_chave": [], "palavras_chave_base": []}}] * 3
+        self.assertEqual(historico.pontos_de_desenvolvimento(es)["itens"], [])
+
+
 class TestCurriculoGeral(unittest.TestCase):
     def setUp(self):
         self.kb, self.tmp = base_exemplo()

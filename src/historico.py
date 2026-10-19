@@ -105,3 +105,30 @@ def lacunas_recorrentes(entradas: list[dict], minimo: int = 2) -> dict:
                     original.setdefault(n, r.get("termo_na_vaga") or r["requisito"])
     pegar = lambda c: [(original[k], n) for k, n in c.most_common() if n >= minimo]
     return {"palavras": pegar(palavras), "requisitos": pegar(requisitos), "vagas": len(entradas)}
+
+
+def pontos_de_desenvolvimento(entradas: list[dict], minimo: int = 2, limite: int = 8) -> dict:
+    """Onde a pessoa poderia se desenvolver, pelo que as vagas que ela busca pedem e o histórico não mostra.
+
+    Usa as candidaturas ENVIADAS quando há pelo menos duas (é o que ela de fato buscou); antes disso, todas as vagas
+    para as quais gerou currículo. Junta requisitos obrigatórios e palavras-chave numa lista só, sem repetir o mesmo
+    termo, da mais pedida para a menos (no empate, obrigatório primeiro).
+    Devolve {"itens": [{"termo", "vagas", "obrigatorio"}], "base": "enviadas" | "geradas", "total": n de vagas}.
+    """
+    from .candidaturas import ENVIADAS
+    vagas = [e for e in entradas if not e.get("geral")]
+    enviadas = [e for e in vagas if e.get("situacao") in ENVIADAS]
+    base, usadas = ("enviadas", enviadas) if len(enviadas) >= 2 else ("geradas", vagas)
+    rec = lacunas_recorrentes(usadas, minimo)
+    itens: list[dict] = []
+    vistos: list[str] = []
+
+    def repetido(n: str) -> bool:
+        return any(n == v or (min(len(n), len(v)) >= 3 and (n in v or v in n)) for v in vistos)
+    for termo, n, obrig in [(t, n, True) for t, n in rec["requisitos"]] + [(t, n, False) for t, n in rec["palavras"]]:
+        chave = normalizar(termo)
+        if chave and not repetido(chave):
+            vistos.append(chave)
+            itens.append({"termo": termo, "vagas": n, "obrigatorio": obrig})
+    itens.sort(key=lambda i: (-i["vagas"], not i["obrigatorio"]))
+    return {"itens": itens[:limite], "base": base, "total": len(usadas)}

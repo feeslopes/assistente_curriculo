@@ -136,7 +136,7 @@ A tela de quem volta. De cima para baixo:
 - **Duas ações:** **Currículo para uma vaga** (ou continuar a vaga que ficou pela metade) e **Currículo geral**.
 - **Próximas ações**, cada uma com um botão: conferir uma leitura ou conversa pendente, preencher dados pessoais, revisar informações *a confirmar*, completar o histórico, marcar como enviados os currículos que você já mandou e **marcar como sem retorno** uma candidatura enviada há mais de 21 dias sem resposta. O aplicativo só sugere; nunca muda a situação sozinho.
 - **Candidaturas:** quantas foram geradas, enviadas, viraram entrevista ou proposta, e quantas ficaram sem retorno. A **taxa de resposta** só aparece a partir de 5 candidaturas enviadas, e a **comparação entre aderência e resultado** só a partir de 20, rotulada como indício: com menos que isso, os números mudam demais a cada resposta e pareceriam uma conclusão sem ser.
-- **O que várias vagas pedem e o seu histórico não mostra.**
+- **Onde se desenvolver para aumentar suas chances:** o que mais se repete nas vagas em que você se candidatou (ou, antes de marcar alguma como enviada, nas vagas para as quais gerou currículo) e o seu histórico não mostra, do mais pedido para o menos, com os requisitos obrigatórios marcados. Dois caminhos: se você já tem e não contou, conte em Meu histórico; se ainda não tem, é por onde vale se desenvolver (um curso, um projeto, uma tarefa no trabalho atual), e até lá fica fora do currículo.
 - Um lembrete para registrar resultados novos no emprego atual.
 
 ### Meu histórico
