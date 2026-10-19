@@ -114,7 +114,7 @@ Para testar a chave sem abrir o aplicativo, numa janela de terminal na pasta do 
 
 ## Usando o aplicativo, passo a passo
 
-Na primeira vez, o aplicativo abre numa tela de boas-vindas. Depois disso, há três áreas no menu de cima: **Meu histórico**, **Currículo para uma vaga** e **Minhas vagas**. As configurações técnicas (provedor, teste de conexão, pastas) ficam no botão de engrenagem, no canto.
+Na primeira vez, o aplicativo abre numa tela de boas-vindas. Depois disso, ele abre sempre no **Início**, e o menu de cima tem **Início**, **Novo currículo**, **Minhas candidaturas** e **Meu histórico**. As configurações técnicas (provedor, teste de conexão, pastas) ficam no botão de engrenagem, no canto.
 
 ### Primeira vez: comece pelo currículo que você já tem
 
@@ -123,11 +123,21 @@ Na primeira vez, o aplicativo abre numa tela de boas-vindas. Depois disso, há t
    - **Seus dados** (nome, título, cidade, telefone, e-mail, LinkedIn), já preenchidos. Eles são lidos no seu computador, nunca vão para a IA e entram só no topo do currículo.
    - **Cada experiência** num cartão, com cargo, empresa e datas editáveis e os itens marcados. As **sugestões da IA** vêm desmarcadas e com etiqueta: marque só se for verdade.
    - Um botão só: **Salvar**. O que está marcado entra no seu histórico. O que ficou desmarcado fica guardado como **a confirmar**, fora dos currículos, até você decidir.
-3. Pronto: o histórico está montado. Agora é escolher uma vaga.
+3. Pronto: o histórico está montado, e o aplicativo leva você ao Início.
 
 Se o currículo diz só o ano de uma experiência ("2016 – 2017"), fica só o ano: o aplicativo nunca inventa o mês. Se a IA tentar completar um mês que não está no texto, o código apaga e avisa.
 
 Não tem currículo? Use **Começar conversando**. Só quer ver como funciona? **Usar dados de exemplo** carrega uma pessoa fictícia.
+
+### Início: o que fazer agora
+
+A tela de quem volta. De cima para baixo:
+
+- **Duas ações:** **Currículo para uma vaga** (ou continuar a vaga que ficou pela metade) e **Currículo geral**.
+- **Próximas ações**, cada uma com um botão: conferir uma leitura ou conversa pendente, preencher dados pessoais, revisar informações *a confirmar*, completar o histórico, marcar como enviados os currículos que você já mandou e **marcar como sem retorno** uma candidatura enviada há mais de 21 dias sem resposta. O aplicativo só sugere; nunca muda a situação sozinho.
+- **Candidaturas:** quantas foram geradas, enviadas, viraram entrevista ou proposta, e quantas ficaram sem retorno. A **taxa de resposta** só aparece a partir de 5 candidaturas enviadas, e a **comparação entre aderência e resultado** só a partir de 20, rotulada como indício: com menos que isso, os números mudam demais a cada resposta e pareceriam uma conclusão sem ser.
+- **O que várias vagas pedem e o seu histórico não mostra.**
+- Um lembrete para registrar resultados novos no emprego atual.
 
 ### Meu histórico
 
@@ -140,7 +150,7 @@ Tudo o que o aplicativo sabe sobre você, em quatro seções:
 
 Se um currículo ou uma conversa trouxer algo que **parece uma experiência que você já tem** (mesma empresa escrita de outro jeito, como "Mercado Livre" e "MercadoLibre", ou o mesmo período), a conferência avisa no cartão. Itens novos em outro idioma numa experiência existente também geram aviso: costumam ser os mesmos, só traduzidos.
 
-### Currículo para uma vaga
+### Novo currículo: para uma vaga
 
 Três passos, com o indicador no topo:
 
@@ -148,19 +158,23 @@ Três passos, com o indicador no topo:
 2. **Encaixe com o seu histórico.** Uma frase resume o encaixe ("o seu histórico comprova 5 de 9 requisitos obrigatórios"), e cada requisito aparece como **Comprovado**, **Em parte** ou **Não aparece no seu histórico**. Onde falta, a pergunta fica ao lado do próprio requisito, com **Não tenho**. Responda só o que for verdade; ao salvar, você confere em cartões e o encaixe se atualiza sozinho. As **palavras-chave da vaga** aparecem em etiquetas: verdes estão no seu histórico, cinzas não. Se a vaga pede quase nada do que você mostrou, o aplicativo diz isso com franqueza.
 3. **Currículo.** Escolha o idioma (o da vaga vem sugerido) e, se quiser, um título. Se os cargos estão em outro idioma no seu histórico, o aplicativo sugere a tradução e você confirma uma vez. **Ajustar o espaço de cada experiência** é opcional: as recentes e as mais ligadas à vaga ganham mais espaço, e as antigas ficam resumidas. Se faltam seu nome ou seu contato, um aviso aparece antes de gerar.
 
-Ao gerar, o currículo **é guardado sozinho** em Minhas vagas. A tela mostra:
+Ao gerar, o currículo **é guardado sozinho** em Minhas candidaturas. A tela mostra:
 
 - **Aderência à vaga** (de 0 a 100), com a comparação com o currículo sem adaptar, o máximo possível com o seu histórico e um gráfico de barras por componente.
-- **Currículo:** a pré-visualização, **Baixar PDF**, **Baixar Word** e **Abrir a pasta**. **Editar o texto** permite ajustar; depois, **Salvar minha versão editada**.
+- **Currículo:** a pré-visualização, **Baixar PDF**, **Baixar Word** e **Abrir a pasta**. **Editar o texto** permite ajustar; depois, **Guardar esta versão**.
 - **O que mudou:** o relatório da adaptação.
 - **Como melhorar:** o que aumentaria a aderência, separado entre o que o seu histórico já tem e o que só vale se for verdade.
 - **Conferir antes de enviar:** os alertas, o que foi tirado por falta de comprovação e de onde veio cada frase.
 
-### Minhas vagas
+### Novo currículo: geral, sem vaga
+
+Para quando pedem o seu currículo sem uma vaga em mente (um contato, uma indicação, um banco de talentos). Um **foco** opcional ("Analista de marketing digital") orienta o que vem primeiro; o aplicativo sugere o objetivo do seu histórico. O caminho é o mesmo (só informações confirmadas, fiscal por IA, alertas), sem aderência, porque não há vaga para comparar. Fica guardado como `saidas/Geral_AAAA-MM/`.
+
+### Minhas candidaturas
 
 Cada candidatura fica numa pasta com o nome da empresa e o mês, por exemplo `saidas/QuintoAndar_2026-10/`, e o currículo leva o seu nome no arquivo (`Curriculo_Ana_Souza.pdf`, com `_EN` quando em inglês). Outra vaga na mesma empresa e no mesmo mês ganha o título no nome da pasta. Gerar de novo para a mesma vaga regrava a mesma pasta.
 
-A área mostra um gráfico com a aderência antes e depois de cada vaga, um cartão por candidatura (PDF, Word, abrir a pasta, o que foi adaptado) e **o que várias vagas pedem e o seu histórico não mostra**: se for verdade, contar isso rende mais do que em qualquer vaga isolada.
+A área mostra um gráfico com a aderência antes e depois de cada vaga e um cartão por candidatura, com PDF, Word, abrir a pasta e o que foi adaptado. Em cada cartão, a **situação** muda com um clique: *Gerado, não enviado*, *Enviado*, *Entrevista*, *Proposta*, *Sem retorno* ou *Não seguiu*. A data de envio fica registrada sozinha, e há um campo de **anotação** (recrutador, data da entrevista, próximo passo). Os filtros separam as candidaturas em andamento, as encerradas e os currículos gerais. Tudo fica em `candidatura.json`, na pasta da vaga.
 
 ### O relatório da adaptação
 
@@ -238,7 +252,7 @@ C4Container
   title Currículo sob medida: contêineres
   Person(voce, "Você")
   System_Boundary(pc, "Seu computador") {
-    Container(web, "Interface web", "Streamlit, app.py e pasta interface", "Três áreas: Meu histórico, Currículo para uma vaga e Minhas vagas")
+    Container(web, "Interface web", "Streamlit, app.py e pasta interface", "Início, Novo currículo, Minhas candidaturas e Meu histórico")
     Container(logica, "Lógica e regras", "Python, pasta src", "Entrevista, análise da vaga, geração, verificações e exportação")
     Container(regras, "Prompts e regras de escrita", "Markdown e YAML", "Pasta prompts, guidelines.md e config.yaml. Você pode editar")
     ContainerDb(base, "Base de conhecimento", "Arquivos Markdown e YAML, pasta base", "Fatos confirmados e pendentes, e o contato")
@@ -607,10 +621,13 @@ Decisões que o briefing original não cobria, tomadas durante o desenvolvimento
 - **O relatório separa o que o código prova do que a IA conta**, e a correspondência de termos aceita singular e plural.
 - **Espaço por experiência decidido pelo código e ajustável.** Parte de um limite por posição (mais recente, mais espaço). Experiências antigas (terminaram há mais de 10 anos, ou as 2 mais antigas de um histórico com ao menos 3 recentes) ficam com 1 bullet, a menos que a análise da vaga as torne relevantes (peso 2: um requisito obrigatório ou dois desejáveis apoiados nelas), caso em que ganham até 3. Recentes relevantes ganham 1 a mais, até o limite da mais recente. Limite 0 mostra só cargo, empresa e datas e não gera alerta de "buraco" no histórico, porque foi escolha sua. O modelo recebe o limite de cada experiência e a instrução de escrever um resumo denso quando o limite é baixo.
 - **Índice de aderência próprio, nunca "nota de ATS".** Só conta palavra-chave que a base sustenta e requisito cujo fato de apoio está no texto, então inventar não sobe o número. O "antes" é o currículo-base montado sem IA. Quando vaga e currículo estão em idiomas diferentes, as palavras-chave são estimadas pelos fatos usados, e isso é dito na tela.
-- **Histórico em arquivos.** `indice.json` ao lado de cada currículo salvo; a área Minhas vagas lê a pasta `saidas/`, uma pasta `Empresa_AAAA-MM` por candidatura, gravada sozinha a cada geração. Currículos salvos antes deste recurso aparecem sem índice.
-- **Interface guiada.** Primeiro uso começa pelo currículo existente; depois, três áreas (Meu histórico, Currículo para uma vaga, Minhas vagas). Conferências em cartões, com tudo à vista, e um botão só para salvar: desmarcado fica guardado *a confirmar*. A vaga em três passos, só o atual aberto.
+- **Histórico em arquivos.** `indice.json` ao lado de cada currículo salvo; a área Minhas candidaturas lê a pasta `saidas/`, uma pasta `Empresa_AAAA-MM` por candidatura, gravada sozinha a cada geração. Currículos salvos antes deste recurso aparecem sem índice.
+- **Interface guiada.** Primeiro uso começa pelo currículo existente; depois, o Início (o que fazer agora) e as áreas Novo currículo, Minhas candidaturas e Meu histórico. Conferências em cartões, com tudo à vista, e um botão só para salvar: desmarcado fica guardado *a confirmar*. A vaga em três passos, só o atual aberto.
 - **A versão adaptada não pode ficar abaixo da original.** A pontuação do currículo sem adaptar aparece antes de gerar. Se a versão adaptada pontuar menos, o gerador recebe uma segunda chance com a lista do que deixou de fora, e fica a melhor das duas. Se mesmo assim ficar abaixo, a tela avisa e oferece **Usar a versão sem adaptar**. O "original" é o currículo montado com o histórico confirmado, não o arquivo enviado: só ele tem a ligação de cada frase com uma informação confirmada, e sem isso a comparação não seria justa.
 - **Termos duvidosos passam pelo fiscal.** Palavra-chave que a análise deu como comprovada, mas que as informações citadas não dizem com as mesmas palavras ("treinou 15 operadores" e "gestão de equipes"), é julgada pelo fiscal por IA na mesma chamada. Se ele não confirma, o termo não conta no índice nem fica nas competências. Termo que está escrito no histórico conta mesmo se a análise esquecer dele.
+- **Acompanhamento de candidaturas com um clique e sem automação.** A situação é marcada pela pessoa; o aplicativo só sugere "Sem retorno" depois de 21 dias (`config.yaml`, bloco `candidaturas`). Nada de integração com e-mail ou LinkedIn: exigiria login, servidor e dados de terceiros, e o aplicativo roda só no computador dela.
+- **Taxas só com dados suficientes.** Taxa de resposta a partir de 5 candidaturas enviadas; relação entre aderência e resultado a partir de 20, rotulada como indício. Com menos, os números mudam demais a cada resposta e pareceriam conclusão.
+- **Currículo geral com foco opcional.** Sem nenhum alvo, um currículo tende a não servir para nada; o foco (ou o objetivo do histórico) orienta o que vem primeiro. Não tem índice de aderência, porque não há vaga.
 - **Feito para a tela do computador.** No celular funciona, mas o menu de cima não cabe inteiro.
 - **Datas só com ano são aceitas.** Currículo real costuma ter "2016 – 2017". Exigir o mês obrigaria a pessoa a inventar um.
 - **Salvar é tudo ou nada.** Se uma experiência nova tem um problema (data inválida, empresa vazia), nada é gravado e a tela diz o que corrigir.

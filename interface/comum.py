@@ -16,16 +16,18 @@ FALHOU = object()  # sentinela: a ação deu erro e a mensagem já foi mostrada
 TIPOS_ARQUIVO = ["pdf", "docx", "md", "txt"]
 
 # Áreas do aplicativo, na ordem do menu de cima.
-AREAS = {"historico": ":material/person: Meu histórico",
-         "vaga": ":material/work: Currículo para uma vaga",
-         "vagas": ":material/folder_open: Minhas vagas"}
+AREAS = {"inicio": ":material/home: Início",
+         "vaga": ":material/add_circle: Novo currículo",
+         "vagas": ":material/fact_check: Minhas candidaturas",
+         "historico": ":material/person: Meu histórico"}
 
 
 def estado_inicial() -> None:
     for chave, valor in (("chat", []), ("rev_id", 0), ("rev_entrevista", None), ("rev_importacao", None),
                          ("analise_id", 0), ("analise", None), ("vaga_analisada", ""), ("rev_lacuna", None),
                          ("gen_id", 0), ("resultado", None), ("trad", None), ("trad_id", 0), ("base_v", 0),
-                         ("msg", None), ("area", "historico"), ("vista_historico", "visao"), ("passo_vaga", 1),
+                         ("msg", None), ("area", "inicio"), ("vista_historico", "visao"), ("passo_vaga", 1),
+                         ("modo_curriculo", "vaga"), ("resultado_geral", None),
                          ("vista_resultado", "curriculo"), ("pastas_por_vaga", {}), ("editando", None),
                          ("comecar_conversando", False)):
         if chave not in st.session_state:
@@ -50,7 +52,7 @@ def estado_inicial() -> None:
         st.session_state["area"] = st.session_state.pop("_ir_para")
 
 
-def ir_para(area: str, vista: str | None = None, **extras) -> None:
+def ir_para(area: str, vista: str | None = None, modo: str | None = None, **extras) -> None:
     """Muda de área (e, opcionalmente, de seção dentro de Meu histórico) no próximo desenho da tela.
 
     Área e seção são widgets: o Streamlit não deixa mudar o valor deles depois de desenhados na mesma execução,
@@ -59,6 +61,8 @@ def ir_para(area: str, vista: str | None = None, **extras) -> None:
     st.session_state["_ir_para"] = area
     if vista:
         st.session_state["_vista"] = vista
+    if modo:
+        st.session_state["_modo"] = modo    # "vaga" ou "geral" dentro de Novo currículo
     st.session_state.update(extras)
 
 

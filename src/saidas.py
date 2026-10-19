@@ -49,7 +49,8 @@ def salvar_saida(markdown: str, pdf: bytes, docx: bytes, vaga: str, analise: dic
 
     Com `pasta`, grava por cima nessa pasta (gerar de novo para a mesma vaga não cria outra candidatura).
     """
-    pasta = pasta or pasta_da_saida(analise.get("empresa", ""), analise.get("titulo_vaga", ""), raiz)
+    empresa = "Geral" if analise.get("geral") else analise.get("empresa", "")   # currículo geral: Geral_AAAA-MM
+    pasta = pasta or pasta_da_saida(empresa, analise.get("titulo_vaga", ""), raiz)
     pasta.mkdir(parents=True, exist_ok=True)
     (pasta / f"{nome_arquivo}.md").write_text(markdown, encoding="utf-8", newline="\n")
     (pasta / f"{nome_arquivo}.pdf").write_bytes(pdf)

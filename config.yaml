@@ -66,3 +66,9 @@ atual:
   en: Present
 
 separador_datas: "–"
+
+# Acompanhamento das candidaturas (área Minhas candidaturas e painel de início)
+candidaturas:
+  dias_sem_retorno: 21      # depois disso, o app SUGERE marcar "Sem retorno" (nunca muda sozinho)
+  minimo_para_taxas: 5      # candidaturas enviadas antes de mostrar a taxa de resposta
+  minimo_para_relacao: 20   # antes disso, comparar aderência e resultado seria ruído

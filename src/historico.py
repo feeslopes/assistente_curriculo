@@ -7,7 +7,7 @@ from collections import Counter
 from datetime import date
 from pathlib import Path
 
-from . import config
+from . import candidaturas, config
 from .texto import normalizar
 
 ARQUIVO_INDICE = "indice.json"
@@ -71,6 +71,8 @@ def listar(raiz: Path | None = None) -> list[dict]:
             "estimado": bool(idx.get("estimado")), "componentes": idx.get("componentes", {}),
             "tem_indice": "depois" in idx,
             "analise": analise,
+            "geral": bool(analise.get("geral")),          # currículo geral: sem vaga, sem candidatura
+            **candidaturas.ler(p),
         })
     return saida
 

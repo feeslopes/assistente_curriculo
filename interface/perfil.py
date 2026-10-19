@@ -32,8 +32,9 @@ def revisao_da_importacao(kb: KB) -> bool:
     r = revisao.formulario("imp", props, st.session_state["rev_id"], kb, com_contato=True)
     if r:
         st.session_state["rev_importacao"] = None
-        comum.avisar("success", revisao.resumo(r) + " Agora é só escolher uma vaga, ou completar o que falta.")
-        st.session_state["_vista"] = "visao"
+        comum.avisar("success", revisao.resumo(r) + " Seu histórico está pronto: agora escolha um currículo para uma "
+                                "vaga ou um currículo geral.")
+        comum.ir_para("inicio", vista="visao")     # o Início mostra as duas ações e o que ainda falta
         st.rerun()
     if st.button("Descartar esta leitura", key="btn_descartar_imp", type="tertiary", icon=":material/delete:"):
         st.session_state["rev_importacao"] = None

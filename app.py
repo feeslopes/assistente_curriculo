@@ -5,14 +5,15 @@ entra no currículo sem uma informação que a pessoa confirmou. As regras são 
 
 Organização da tela, pensada para quem nunca usou:
 - primeiro uso: boas-vindas, com "envie o seu currículo" como caminho principal;
-- depois, três áreas no menu de cima: Meu histórico, Currículo para uma vaga e Minhas vagas;
+- depois, o Início (o que fazer agora e como andam as candidaturas) e as áreas Novo currículo, Minhas candidaturas
+  e Meu histórico;
 - configurações técnicas num botão discreto no canto.
 """
 from __future__ import annotations
 
 import streamlit as st
 
-from interface import comum, estilo, inicio, perfil, vaga, vagas
+from interface import comum, estilo, inicio, painel, perfil, vaga, vagas
 from src import config, exemplo
 from src.kb import KB
 
@@ -71,8 +72,10 @@ def main() -> None:
             inicio.boas_vindas(kb, config_erro)
             return
         aviso_revisao_pendente()
-        area = st.session_state.get("area") or "historico"
-        if area == "vaga":
+        area = st.session_state.get("area") or "inicio"
+        if area == "inicio":
+            painel.area(kb, cfg, config_erro)
+        elif area == "vaga":
             vaga.area(kb, cfg, config_erro)
         elif area == "vagas":
             vagas.area()
