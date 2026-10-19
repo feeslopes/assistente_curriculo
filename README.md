@@ -169,7 +169,7 @@ Três passos, com o indicador no topo:
 
 1. **A vaga.** Cole o texto completo (ou envie um arquivo) e clique em **Analisar vaga**.
 2. **Encaixe com o seu histórico.** Uma frase resume o encaixe ("o seu histórico comprova 5 de 9 requisitos obrigatórios"), e cada requisito aparece como **Comprovado**, **Em parte** ou **Não aparece no seu histórico**. Onde falta, a pergunta fica ao lado do próprio requisito, com **Não tenho**. Responda só o que for verdade; ao salvar, você confere em cartões e o encaixe se atualiza sozinho. As **palavras-chave da vaga** aparecem em etiquetas: verdes estão no seu histórico, cinzas não. Se a vaga pede quase nada do que você mostrou, o aplicativo diz isso com franqueza.
-3. **Currículo.** Escolha o idioma (o da vaga vem sugerido) e, se quiser, um título. Se os cargos estão em outro idioma no seu histórico, o aplicativo sugere a tradução e você confirma uma vez. **Ajustar o espaço de cada experiência** é opcional: as recentes e as mais ligadas à vaga ganham mais espaço, e as antigas ficam resumidas. Se faltam seu nome ou seu contato, um aviso aparece antes de gerar.
+3. **Currículo.** Escolha o idioma (o da vaga vem sugerido) e, se quiser, um título. Se os cargos estão em outro idioma no seu histórico, o aplicativo sugere a tradução e você confirma uma vez. **Ajustar o espaço de cada experiência** é opcional: as recentes e as mais ligadas à vaga ganham mais espaço, e as antigas ficam resumidas. Ali o aplicativo mostra, por experiência, quantos fatos a vaga valoriza e uma estimativa do tamanho do currículo. Se o PDF passar do limite de páginas, o aplicativo refaz o texto mais curto sozinho (até duas vezes) antes de mostrar, e só avisa se ainda assim não couber. Se faltam seu nome ou seu contato, um aviso aparece antes de gerar.
 
 Ao gerar, o currículo **é guardado sozinho** em Minhas candidaturas. A tela mostra:
 
@@ -217,7 +217,7 @@ A adaptação em si funciona assim: a análise da vaga identifica quais palavras
 | Desejáveis | 10 | Igual aos obrigatórios |
 | Formato | 15 | Seções convencionais, contato no topo, páginas dentro do limite |
 
-Se a vaga não tem desejáveis, os outros pesos se reescalam. O **currículo sem adaptar** é montado sem IA: as informações confirmadas na ordem do histórico, com os mesmos limites de espaço. O **máximo com o seu histórico** é o índice se o texto usasse tudo o que o histórico já sustenta; acima dele, só com informações novas e verdadeiras.
+Se a vaga não tem desejáveis, os outros pesos se reescalam. O **currículo sem adaptar** é montado sem IA: as informações confirmadas na ordem do histórico, com os mesmos limites de espaço. O **máximo com o seu histórico** é o índice se o texto usasse tudo o que o histórico já sustenta, e o limite de páginas conta como cumprido (isso se resolve condensando o texto, não mexendo no histórico); acima dele, só com informações novas e verdadeiras.
 
 **O índice não sobe por inventar:** palavra que o histórico não sustenta não pontua, mesmo escrita no currículo, e frase que o fiscal por IA apontou como exagero também não conta. Em **Como melhorar**, cada ação traz o ganho aproximado:
 
@@ -659,7 +659,7 @@ A IA fiscal é uma segunda chamada ao modelo. Ela dá um **veredito para cada it
 | O entrevistador pergunta o que já está no meu currículo | Quase sempre é porque a conferência do currículo lido não foi salva. Salve, e a conversa passa a perguntar só o que falta. |
 | "A verificação por IA não rodou" | O currículo saiu sem o segundo passo de conferência. Leia com mais atenção, ou gere de novo. |
 | O PDF importado "não tem texto" | É um PDF escaneado (imagem). Envie uma versão em texto ou use DOCX. |
-| O PDF passou do limite de páginas | Corte conteúdo editando, ou mude `max_paginas` e `bullets_por_experiencia` no `config.yaml`. |
+| O PDF passou do limite de páginas | O aplicativo já tenta refazer mais curto. Se o aviso continuar, corte um bullet de uma experiência antiga editando o texto, reduza o espaço dela antes de gerar, ou mude `max_paginas` e `bullets_por_experiencia` no `config.yaml`. |
 | A porta 8501 está ocupada | Feche a janela preta de uma execução anterior e abra de novo. |
 | Fechei o aplicativo no meio da conversa | Abra de novo. A conversa e as revisões não salvas voltam sozinhas, com um aviso no topo. Para recomeçar do zero, use **Recomeçar a conversa**. |
 | Quero ver o que a IA recebeu e respondeu | **Meu histórico**, seção **Avançado**, ou a pasta `saidas/logs`. |
@@ -752,6 +752,7 @@ Decisões que o briefing original não cobria, tomadas durante o desenvolvimento
 - **Taxas só com dados suficientes.** Taxa de resposta a partir de 5 candidaturas enviadas; relação entre aderência e resultado a partir de 20, rotulada como indício. Com menos, os números mudam demais a cada resposta e pareceriam conclusão.
 - **Currículo geral com foco opcional.** Sem nenhum alvo, um currículo tende a não servir para nada; o foco (ou o objetivo do histórico) orienta o que vem primeiro. Não tem índice de aderência, porque não há vaga.
 - **Atualização automática só de versões publicadas.** O `iniciar` instala sozinho a Release mais nova, sem perguntar, porque uma pergunta na janela preta confunde quem não usa terminal. Antes, guarda cópia do código e do histórico; qualquer falha desfaz a troca. Atualizar a cada mudança na `main` foi descartado: um merge para testar viraria atualização na máquina dela. O código baixado vem do repositório do responsável: vale manter a verificação em duas etapas ligada na conta do GitHub.
+- **Limite de 2 páginas.** É o limite mais comum para currículos no Brasil, e você muda em `max_paginas` no `config.yaml`. Passar do limite derruba a nota de Formato, então o aplicativo condensa o texto em vez de cortar palavras-chave. O número de bullets pouco mexe na nota, porque as palavras-chave também entram no resumo e nas competências: bullets servem a quem lê, e o custo deles é espaço.
 - **Feito para a tela do computador.** No celular funciona, mas o menu de cima não cabe inteiro.
 - **Datas só com ano são aceitas.** Currículo real costuma ter "2016 – 2017". Exigir o mês obrigaria a pessoa a inventar um.
 - **Salvar é tudo ou nada.** Se uma experiência nova tem um problema (data inválida, empresa vazia), nada é gravado e a tela diz o que corrigir.

@@ -243,6 +243,25 @@ def _salvar(kb: KB, res, markdown: str, comp: dict | None, ctx: dict | None = No
     st.session_state["md_salvo"] = markdown
 
 
+def _previa_de_tamanho(kb: KB, cfg: dict, analise: dict, manuais: dict[str, int]) -> None:
+    """O que mais bullets custam e rendem, antes de gerar (cálculo local, sem IA)."""
+    limite = int(cfg.get("max_paginas", 2))
+    cabem = aderencia.PALAVRAS_POR_PAGINA * limite - 40
+    try:
+        palavras = aderencia.estimar_palavras(kb, cfg, manuais, tailor.ids_valorizados(analise))
+    except Exception:
+        return
+    folga = cabem - palavras
+    if folga >= 0:
+        situacao = f"deve caber em {limite} página(s), com folga de uns {folga} palavras (cerca de {max(folga // 25, 0)} bullets)"
+    else:
+        situacao = f"deve passar de {limite} página(s) em uns {-folga} palavras: eu condenso o texto, mas vale reduzir algum espaço"
+    st.markdown(f"**Estimativa:** com estes espaços, o currículo tem cerca de {palavras} palavras e {situacao}.")
+    st.caption("Mais bullets mostram mais provas a quem lê, mas quase não mexem na nota: as palavras-chave e os requisitos "
+               "também entram no resumo e nas competências. O custo é espaço, e o número exato só aparece depois de gerar. "
+               "Por isso o app dá prioridade, em cada experiência, aos fatos que a vaga valoriza.")
+
+
 def opcoes_e_gerar(kb: KB, cfg: dict, analise: dict) -> None:
     vaga = st.session_state["vaga_analisada"]
     aid = st.session_state["analise_id"]
@@ -260,10 +279,14 @@ def opcoes_e_gerar(kb: KB, cfg: dict, analise: dict) -> None:
         with st.expander("Ajustar o espaço de cada experiência (opcional)"):
             st.caption("O app dá mais espaço às experiências recentes e às que mais combinam com a vaga, e resume as "
                        "antigas. Mude se quiser: 0 mostra só o cargo, a empresa e as datas.")
+            valorizados = tailor.fatos_valorizados_por_experiencia(kb, analise)
             for e in kb.experiencias():
                 d = detalhe[e.slug]
+                v, total = valorizados[e.slug]
                 manuais[e.slug] = int(st.number_input(f"{d['rotulo']}: {d['motivo']}", min_value=0, max_value=8,
-                                                      value=int(d["limite"]), step=1, key=f"lim_{aid}_{e.slug}"))
+                                                      value=int(d["limite"]), step=1, key=f"lim_{aid}_{e.slug}",
+                                                      help=f"A vaga valoriza {v} dos {total} fatos desta experiência."))
+            _previa_de_tamanho(kb, cfg, analise, manuais)
     secao_traducao(kb, idioma)
     contato = kb.contato()
     if not contato.get("nome") or not (contato.get("email") or contato.get("telefone")):
@@ -273,7 +296,7 @@ def opcoes_e_gerar(kb: KB, cfg: dict, analise: dict) -> None:
             comum.ir_para("historico", vista="dados")
             st.rerun()
     if st.button("Gerar currículo", key="btn_gerar", type="primary", icon=":material/auto_awesome:"):
-        res = comum.executar("Escrevendo e conferindo o currículo. Isso leva cerca de um minuto...", lambda: tailor.gerar(
+        res = comum.executar("Escrevendo e conferindo o currículo. Isso leva de um a dois minutos...", lambda: tailor.gerar(
             comum.obter_llm(kb), kb, vaga, analise, idioma, cfg, titulo or None, True, manuais))
         if res is not comum.FALHOU:
             st.session_state["gen_id"] += 1
@@ -320,6 +343,25 @@ def bloco_aderencia(comp: dict) -> None:
                 [ROTULO_COMPONENTE[k] for k in chaves],
                 [100 * antes["componentes"].get(k, {}).get("fracao", 0) for k in chaves],
                 [100 * depois["componentes"][k]["fracao"] for k in chaves], altura=260)
+
+
+def aviso_paginas(texto: str, cfg: dict, res) -> None:
+    """Passar do limite de páginas é o aviso mais prático de todos: fica junto da nota, não escondido numa aba."""
+    limite = int(cfg.get("max_paginas", 2))
+    try:
+        paginas = export.gerar_pdf(texto)[1]
+    except Exception:
+        return
+    if paginas > limite:
+        sobra = tailor._palavras_na_ultima_pagina(texto)
+        resto = f" A última tem só {sobra} palavras." if sobra is not None and sobra < 60 else ""
+        tentou = " Eu já tentei refazer mais curto e ainda passou." if res.condensada else ""
+        st.warning(f"O PDF ficou com **{paginas} páginas** e o limite é {limite}.{resto}{tentou} Para caber: edite o "
+                   "texto e corte um bullet de uma experiência antiga, ou volte ao encaixe e reduza o espaço dela em "
+                   "**Ajustar o espaço de cada experiência**.", icon=":material/description:")
+    elif res.condensada:
+        st.caption(":material/compress: O primeiro texto passou de "
+                   f"{limite} página(s), então eu refiz mais curto, juntando fatos parecidos, para caber.")
 
 
 def vista_curriculo(kb: KB, res, cfg: dict, texto_atual: str, comp: dict | None, ctx: dict | None = None) -> None:
@@ -453,6 +495,7 @@ def resultado(kb: KB, cfg: dict, ctx: dict | None = None) -> None:
         elif res.segunda_tentativa:
             st.caption(":material/autorenew: A primeira versão ficou abaixo do seu currículo sem adaptar, então eu refiz "
                        "uma vez pedindo de volta o que tinha ficado de fora.")
+    aviso_paginas(texto_atual, cfg, res)
     if "_vista_res" in st.session_state:
         st.session_state["vista_resultado"] = st.session_state.pop("_vista_res")
     rotulos = dict(VISTAS)

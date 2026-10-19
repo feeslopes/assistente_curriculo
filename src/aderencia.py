@@ -31,8 +31,12 @@ AVISO = ("O índice só sobe com o que é verdade. Se a vaga pede algo que você
 
 # ------------------------------------------------------------------------ currículo-base ("antes")
 
-def gerado_base(kb: KB, cfg: dict) -> dict:
-    """O que um currículo sem adaptação diria: fatos na ordem da base, com os limites de espaço de sempre."""
+def gerado_base(kb: KB, cfg: dict, limites: dict[str, int] | None = None, preferidos: set[str] | None = None) -> dict:
+    """O que um currículo sem adaptação diria: fatos na ordem da base, com os limites de espaço de sempre.
+
+    `limites` (slug -> bullets) e `preferidos` (ids de fatos que a vaga valoriza, que vêm primeiro) servem à
+    estimativa de páginas antes de gerar.
+    """
     confirmados = kb.fatos("confirmado")
 
     def de(slug: str) -> list:
@@ -44,9 +48,9 @@ def gerado_base(kb: KB, cfg: dict) -> dict:
     perfil = de("perfil")[:2]
     experiencias = []
     for pos, e in enumerate(kb.experiencias()):
-        lim = render._limite_bullets(cfg, pos)
-        experiencias.append({"id": e.slug, "bullets": [{"texto": f.texto, "fontes": [f.id]}
-                                                       for f in de(e.slug)[:max(lim, 0)]]})
+        lim = (limites or {}).get(e.slug, render._limite_bullets(cfg, pos))
+        fatos = sorted(de(e.slug), key=lambda f: f.id not in (preferidos or ()))   # estável: o resto segue a ordem
+        experiencias.append({"id": e.slug, "bullets": [{"texto": f.texto, "fontes": [f.id]} for f in fatos[:max(lim, 0)]]})
     return {
         "titulo": "",
         "resumo": {"texto": " ".join(f.texto for f in perfil), "fontes": [f.id for f in perfil]} if perfil else None,
@@ -57,8 +61,21 @@ def gerado_base(kb: KB, cfg: dict) -> dict:
     }
 
 
-def curriculo_base(kb: KB, cfg: dict) -> render.Curriculo:
-    return render.montar(kb, gerado_base(kb, cfg), kb.idioma_base(), cfg, fiscal="ausente")
+def curriculo_base(kb: KB, cfg: dict, limites: dict[str, int] | None = None,
+                   preferidos: set[str] | None = None) -> render.Curriculo:
+    return render.montar(kb, gerado_base(kb, cfg, limites, preferidos), kb.idioma_base(), cfg, fiscal="ausente")
+
+
+PALAVRAS_POR_PAGINA = 450   # medido em PDFs reais (A4, fonte 10): 430 a 480 por página
+
+
+def estimar_palavras(kb: KB, cfg: dict, limites: dict[str, int], preferidos: set[str] | None = None) -> int:
+    """Tamanho aproximado, em palavras, de um currículo com estes limites, antes de gerar (só código, sem IA).
+
+    Parte dos fatos como estão escritos e soma 8%, que é o que o resumo e as competências costumam acrescentar
+    (medido em currículos gerados). É uma estimativa: o número exato só existe depois de gerar.
+    """
+    return round(len(curriculo_base(kb, cfg, limites, preferidos).markdown.split()) * 1.08)
 
 
 # ------------------------------------------------------------------------ cálculo
@@ -83,6 +100,9 @@ def fontes_usadas(markdown: str, rastro: list[dict]) -> set[str]:
     return usadas
 
 
+NOME_CHECK_PAGINAS = "Páginas dentro do limite"
+
+
 def _estrutura(markdown: str, kb: KB, cfg: dict, idioma: str, paginas: int | None) -> list[dict]:
     titulos = cfg["titulos_secoes"][idioma]
     tem = {a.slug for a in kb.arquivos().values() if any(True for _ in a.fatos())}
@@ -101,7 +121,7 @@ def _estrutura(markdown: str, kb: KB, cfg: dict, idioma: str, paginas: int | Non
         "Preencha e-mail e telefone em Meu histórico, Dados pessoais (ficam só no seu computador).")
     if paginas is not None:
         limite = int(cfg.get("max_paginas", 2))
-        add("Páginas dentro do limite", paginas <= limite, f"O PDF tem {paginas} páginas e o limite é {limite}.")
+        add(NOME_CHECK_PAGINAS, paginas <= limite, f"O PDF tem {paginas} páginas e o limite é {limite}.")
     return checks
 
 
@@ -198,7 +218,7 @@ def calcular(analise: dict, markdown: str, rastro: list[dict], kb: KB, cfg: dict
         c["pontos"] = round(c["peso"] * c["fracao"], 1)
     total = round(sum(c["pontos"] for c in comp.values()))
 
-    # teto: o índice se o texto usasse tudo o que a base já sustenta (a estrutura fica como está)
+    # teto: o índice se o texto usasse tudo o que a base já sustenta (o limite de páginas conta como cumprido)
     teto = 0.0
     for k, c in comp.items():
         if k == "palavras":
@@ -206,6 +226,10 @@ def calcular(analise: dict, markdown: str, rastro: list[dict], kb: KB, cfg: dict
         elif k in ("obrigatorios", "desejaveis"):
             itens = [r for r in reqs if r["tipo"] == ("obrigatorio" if k == "obrigatorios" else "desejavel")]
             f = sum({"coberto": 1.0, "parcial": 0.5}.get(r["status"], 0.0) * bool(r["evidencias"]) for r in itens) / len(itens)
+        elif k == "estrutura":
+            # o limite de páginas se resolve condensando o texto, não mexendo na base: no teto ele conta como cumprido
+            checks_ok = [c_["ok"] or c_["nome"] == NOME_CHECK_PAGINAS for c_ in c["detalhe"]["checks"]]
+            f = sum(checks_ok) / len(checks_ok)
         else:
             f = c["fracao"]
         teto += c["peso"] * f
