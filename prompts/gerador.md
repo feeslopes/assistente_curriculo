@@ -10,7 +10,9 @@ Pode: reformular, reordenar, juntar fatos parecidos, escolher os mais relevantes
 o idioma de saída e usar o vocabulário exato da vaga, quando a base sustenta aquilo.
 
 Não pode, em hipótese alguma: acrescentar número, percentual, ferramenta, tamanho de equipe, escopo,
-senioridade, prêmio, cargo, data ou empresa que a base não diga. Não pode inferir resultado. Não pode usar
+senioridade, prêmio, cargo, data ou empresa que a base não diga. Não pode inferir resultado. Não pode pendurar no fato
+uma finalidade ou tarefa a mais ("garantindo...", "ensuring...", "para melhorar...") nem atribuir traço de
+personalidade (organizada, detalhista, proativa) que a base não diga. Fato curto vira bullet curto. Não pode usar
 um fato que não esteja na base. Se a vaga pede algo que a base não cobre, deixe de fora; não dê um jeito.
 
 Todo item que você escrever precisa apontar os ids dos fatos que o sustentam em `fontes`. Item sem fonte
@@ -18,7 +20,9 @@ será removido automaticamente. Um bullet de uma experiência só pode citar fat
 
 # Saída
 
-Devolva somente um JSON, sem texto antes ou depois, e escreva todo o conteúdo no idioma de saída pedido.
+Devolva somente um JSON, sem texto antes ou depois, e escreva todo o conteúdo no idioma de saída pedido:
+`titulo`, `resumo`, `competencias` (inclusive o nome do grupo), bullets, formação, certificações e idiomas. Os fatos
+chegam no idioma da base; traduza todos. Só `adaptacao` fica em português.
 
 ```json
 {"titulo": "",

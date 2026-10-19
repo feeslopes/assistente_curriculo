@@ -43,6 +43,38 @@ def detectar_idioma(texto: str, min_palavras: int = 15) -> str | None:
     return "pt" if pt > en else "en"
 
 
+_FIM_EN = re.compile(r"(?:ed|ing|ly|tion|ment|ship)$")
+_FIM_PT = re.compile(r"(?:ou|iu|eu|ava|ia|cao|coes|mente|ura|agem)$")
+
+
+def idioma_de_frase(texto: str) -> str | None:
+    """Idioma de uma frase curta de currículo ("Treinou 15 operadores", "Handled calls from drivers").
+
+    Frases curtas quase não têm palavras como "de" e "the", e a heurística por elas não decide. Aqui contam também
+    acentos e cedilha e as terminações típicas de cada idioma. Serve para avisos, nunca para bloquear.
+    """
+    longo = detectar_idioma(texto, min_palavras=8)
+    if longo:
+        return longo
+    bruto = re.findall(r"[a-zA-ZÀ-ÿ]+", texto or "")
+    pt = en = 0
+    for w in bruto:
+        n = normalizar(w)
+        if len(n) < 2:
+            continue
+        if re.search(r"[ãõçáéíóúâêô]", w.lower()) or n in _STOP_PT:
+            pt += 1
+        elif n in _STOP_EN:
+            en += 1
+        elif len(n) >= 5 and _FIM_EN.search(n):
+            en += 1
+        elif len(n) >= 5 and _FIM_PT.search(n):
+            pt += 1
+    if abs(pt - en) < 2:
+        return None
+    return "pt" if pt > en else "en"
+
+
 # ------------------------------------------------------------------------ JSON
 
 _THINK = re.compile(r"<think>.*?</think>", re.S | re.I)

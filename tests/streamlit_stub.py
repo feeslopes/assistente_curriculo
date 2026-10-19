@@ -54,7 +54,7 @@ class FakeStreamlit:
     def __getattr__(self, nome):
         if nome in {"set_page_config", "title", "header", "subheader", "markdown", "write", "caption", "info",
                     "warning", "error", "success", "divider", "code", "json", "metric", "table", "dataframe", "text",
-                    "bar_chart"}:
+                    "bar_chart", "altair_chart", "badge"}:
             return self._mudo(nome)
         raise AttributeError(f"stub do streamlit não conhece st.{nome}")
 
@@ -72,6 +72,13 @@ class FakeStreamlit:
     def form(self, *a, **k): return Ctx(self)
     def spinner(self, *a, **k): return Ctx(self)
     def chat_message(self, *a, **k): return Ctx(self)
+    def popover(self, *a, **k): return Ctx(self)
+
+    def dialog(self, titulo, **k):
+        """@st.dialog: no stub, a função roda direto no lugar (como se o diálogo abrisse)."""
+        def decorador(funcao):
+            return funcao
+        return decorador
 
     def rerun(self):
         raise Parar()
@@ -111,6 +118,12 @@ class FakeStreamlit:
 
     def selectbox(self, rotulo, opcoes, index=0, key=None, **k):
         return self._valor(key, opcoes[index])
+
+    def segmented_control(self, rotulo, opcoes, key=None, default=None, **k):
+        return self._valor(key, default)
+
+    def toggle(self, rotulo, value=False, key=None, **k):
+        return bool(self._valor(key, value))
 
     def file_uploader(self, rotulo, type=None, key=None, **k):
         return self.uploads.get(key or rotulo)

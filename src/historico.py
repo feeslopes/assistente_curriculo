@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import re
 from collections import Counter
+from datetime import date
 from pathlib import Path
 
 from . import config
@@ -35,19 +36,34 @@ def _ler_json(caminho: Path) -> dict:
         return {}
 
 
+def _primeiro(pasta: Path, nome: str, ext: str) -> Path | None:
+    """O arquivo do currículo: o nome registrado no índice, senão o primeiro com a extensão."""
+    alvo = pasta / f"{nome}{ext}"
+    if alvo.exists():
+        return alvo
+    return next(iter(sorted(pasta.glob(f"*{ext}"))), None)
+
+
 def listar(raiz: Path | None = None) -> list[dict]:
     """Vagas salvas, da mais recente para a mais antiga. Pasta sem análise é ignorada."""
     raiz = raiz or config.saidas_dir()
     if not raiz.is_dir():
         return []
     saida = []
-    for p in sorted(raiz.iterdir(), reverse=True):
-        if not p.is_dir() or not (p / "analise.json").exists():
-            continue
+    pastas = [p for p in raiz.iterdir() if p.is_dir() and (p / "analise.json").exists()]
+    # a mais recente primeiro, pela última gravação (o nome da pasta não começa mais pela data)
+    for p in sorted(pastas, key=lambda p: (p / "analise.json").stat().st_mtime, reverse=True):
         analise, idx = _ler_json(p / "analise.json"), _ler_json(p / ARQUIVO_INDICE)
-        data = p.name[:10] if re.match(r"\d{4}-\d{2}-\d{2}", p.name) else ""
+        if idx.get("data"):
+            data = str(idx["data"])
+        elif re.match(r"\d{4}-\d{2}-\d{2}", p.name):     # pastas do formato antigo: data-empresa-vaga
+            data = p.name[:10]
+        else:
+            data = date.fromtimestamp((p / "analise.json").stat().st_mtime).isoformat()
+        arquivo = idx.get("arquivo") or "curriculo"
         saida.append({
-            "pasta": p, "nome": p.name, "data": data,
+            "pasta": p, "nome": p.name, "data": data, "arquivo": arquivo,
+            "pdf": _primeiro(p, arquivo, ".pdf"), "docx": _primeiro(p, arquivo, ".docx"),
             "empresa": analise.get("empresa") or idx.get("empresa", ""),
             "titulo_vaga": analise.get("titulo_vaga") or idx.get("titulo_vaga", ""),
             "idioma": idx.get("idioma", ""),

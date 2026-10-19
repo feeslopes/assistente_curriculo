@@ -14,7 +14,7 @@ import re
 from dataclasses import dataclass, field
 
 from .kb import KB
-from .texto import normalizar
+from .texto import detectar_idioma, normalizar
 from .verify import numeros_nao_suportados, palavras_da_base, siglas_nao_suportadas, termo_suportado
 
 TRAVESSAO = re.compile(r"\s*[—―]\s*")
@@ -44,6 +44,8 @@ def _visivel(url: str) -> str:
 
 
 def formatar_data(aaaa_mm: str, idioma: str, cfg: dict) -> str:
+    if len(aaaa_mm) == 4:          # só o ano: a pessoa não disse o mês, o currículo também não diz
+        return aaaa_mm
     ano, mes = aaaa_mm.split("-")
     return f"{cfg['meses'][idioma][int(mes) - 1]} {ano}"
 
@@ -68,15 +70,21 @@ def _cortar_resumo(texto: str, max_palavras: int) -> str | None:
 
 class _Montador:
     def __init__(self, kb: KB, idioma: str, cfg: dict, veredito: dict | None = None, fiscal: str = "ausente",
-                 limites: dict | None = None):
+                 limites: dict | None = None, sustentadas: dict | None = None):
         self.kb, self.idioma, self.cfg = kb, idioma, cfg
+        # termos da vaga que a análise ligou a fatos (termo normalizado -> ids). Sinônimo legítimo ("devoluções" e
+        # "logística reversa") não passa no filtro de palavras; com fato citado, fica, e o fiscal por IA confere.
+        self.sustentadas = sustentadas or {}
         self.limites = limites or {}   # slug -> máximo de bullets (0 = só cabeçalho); vazio = regra por posição
         self.fiscal = fiscal
         self.veredito = veredito or {}
         self.ids_ok = kb.ids_confirmados()
         self.textos_base = kb.textos_confirmados()
         self.texto_por_id = {f.id: f.texto for f in kb.fatos("confirmado")}
-        self.base_palavras = palavras_da_base(self.textos_base)
+        # cargo, empresa e local também são da base: "Sênior" do cargo não é uma sigla inventada
+        cabecalhos = [" ".join(str(e.meta.get(k, "")) for k in ("cargo", "cargo_en", "cargo_pt", "empresa", "local",
+                                                                 "local_en", "local_pt")) for e in kb.experiencias()]
+        self.base_palavras = palavras_da_base(self.textos_base + cabecalhos)
         # Comparar palavras só faz sentido quando a saída está no idioma da base.
         self.idioma_base = kb.idioma_base()
         self.estrito = self.idioma_base == idioma
@@ -108,13 +116,19 @@ class _Montador:
                 self.removidos.append({"secao": secao, "texto": t,
                                        "motivo": "sem fato confirmado de apoio" if not brutas else "fontes inválidas"})
                 self.alertas.append(f"Removido de '{secao}' por não ter fato confirmado de apoio: \"{t}\". "
-                                    "Se isso é verdade, confirme o fato na aba Minha base.")
+                                    "Se isso é verdade, confirme essa informação em Meu histórico.")
                 return None
             self.alertas.append(f"Mantido em '{secao}' SEM fato confirmado de apoio: \"{t}\".")
         elif invalidas:
             self.alertas.append(f"Fontes ignoradas em '{secao}' (inexistentes, pendentes ou de outra seção): "
                                 f"{', '.join(invalidas)}.")
         self.ultimas_fontes = validas
+        # Trecho no idioma errado (o modelo às vezes esquece de traduzir o resumo): o código percebe e avisa.
+        idioma_t = detectar_idioma(t, min_palavras=8) if fiscalizar else None
+        if idioma_t and idioma_t != self.idioma:
+            self.alertas.append(f"Este trecho saiu em {NOMES_IDIOMA[idioma_t]}, mas o currículo é em "
+                                f"{NOMES_IDIOMA[self.idioma]}: \"{t[:90]}{'...' if len(t) > 90 else ''}\". "
+                                "Gere de novo ou corrija editando o texto.")
         nums = numeros_nao_suportados(t, self.textos_base)
         if nums:
             self.alertas.append(f"Número(s) {', '.join(nums)} não aparece(m) na base: \"{t}\". Confira antes de usar.")
@@ -149,7 +163,7 @@ class _Montador:
         linhas: list[str] = []
         nome = c.get("nome")
         if not nome:
-            self.alertas.append("O nome não está preenchido. Preencha o contato na aba Minha base.")
+            self.alertas.append("O nome não está preenchido. Preencha seus dados em Meu histórico, Dados pessoais.")
         linhas.append(f"# {nome or 'Seu Nome'}  ")
         if titulo:
             linhas.append(f"**{titulo}**  ")
@@ -228,7 +242,9 @@ class _Montador:
             termos = [x.strip() for x in re.split(r"[,;]", itens) if x.strip()]
             bons: list[str] = []
             for x in termos:
-                if self.regra_do_codigo and not termo_suportado(x, self.base_palavras, self.estrito):
+                sustentado_pela_analise = bool(self.sustentadas.get(normalizar(x), set()) & set(fontes))
+                if (self.regra_do_codigo and not termo_suportado(x, self.base_palavras, self.estrito)
+                        and not sustentado_pela_analise):
                     self.removidos.append({"secao": "competências", "texto": x, "motivo": "termo sem respaldo na base"})
                 elif f"competências|{x}" in self.veredito:
                     self.removidos.append({"secao": "competências", "texto": x,
@@ -238,13 +254,20 @@ class _Montador:
             if len(bons) < len(termos):
                 self.alertas.append("Competências removidas por não terem respaldo nos fatos: "
                                     + ", ".join(x for x in termos if x not in bons)
-                                    + ". Se são verdade, confirme o fato na aba Minha base.")
+                                    + ". Se são verdade, confirme essa informação em Meu histórico.")
             for x in bons:
                 self._para_fiscal("competências", x, fontes, "termo")
             if not bons:
                 continue
             itens = ", ".join(bons)
             nome = limpar(g.get("grupo"))
+            if nome:
+                # o nome do grupo também afirma algo ("Liderança de equipes"): passa pelo fiscal
+                self._para_fiscal("competências-grupo", nome, fontes, "termo")
+                problema = self.veredito.get(f"competências-grupo|{nome}")
+                if problema:
+                    self.alertas.append(f"O nome do grupo de competências \"{nome}\" foi tirado: {problema}")
+                    nome = ""
             if len(saida) >= maximo:
                 self.alertas.append(f"Grupo de competências '{nome}' descartado: limite de {maximo} grupos.")
                 continue
@@ -332,7 +355,8 @@ class _Montador:
 
 
 def montar(kb: KB, gerado, idioma: str, cfg: dict, titulo_usuario: str | None = None,
-           veredito: dict | None = None, fiscal: str = "ausente", limites: dict | None = None) -> Curriculo:
+           veredito: dict | None = None, fiscal: str = "ausente", limites: dict | None = None,
+           sustentadas: dict | None = None) -> Curriculo:
     """Monta o currículo. `gerado` é o JSON do gerador, já parseado (qualquer lixo é tolerado).
 
     `veredito` (opcional): {"secao|texto": "problema"} vindo do fiscal por IA.
@@ -341,7 +365,7 @@ def montar(kb: KB, gerado, idioma: str, cfg: dict, titulo_usuario: str | None = 
     if idioma not in ("pt", "en"):
         raise ValueError("Idioma precisa ser 'pt' ou 'en'.")
     g = gerado if isinstance(gerado, dict) else {}
-    m = _Montador(kb, idioma, cfg, veredito, fiscal, limites)
+    m = _Montador(kb, idioma, cfg, veredito, fiscal, limites, sustentadas)
     titulo = m.titulo(g.get("titulo"), titulo_usuario)
 
     secoes: dict[str, list[str]] = {

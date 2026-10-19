@@ -23,6 +23,11 @@ como o currículo é escrito. Limites numéricos e ordem das seções ficam em `
 - Cargos encerrados em passado. No cargo atual, presente ou passado são aceitos; o que importa é manter o mesmo
   tempo verbal em todos os bullets da mesma experiência.
 - Evite adjetivos vazios (dinâmico, proativo, apaixonado, orientado a resultados).
+- Não atribua traços de personalidade (organizada, detalhista, comunicativa, "attention to detail") que a base
+  não diga com essas palavras. Mostre o que a pessoa fez, não como ela é.
+- Não acrescente ao fato uma finalidade, um efeito ou uma tarefa a mais: "cuida da agenda de 6 médicos" não vira
+  "gerenciou agendas, garantindo a eficiência dos atendimentos"; "atende na recepção" não vira "recebeu pacientes e
+  resolveu dúvidas". Se o fato é curto, o bullet fica curto.
 - Evite travessão longo. Use vírgula, ponto ou hífen.
 
 ## Estrutura de cada bullet
@@ -49,7 +54,8 @@ como o currículo é escrito. Limites numéricos e ordem das seções ficam em `
 - Só inclua competência que a base sustenta.
 
 ## Idioma
-- O texto inteiro sai no idioma escolhido na hora de gerar.
+- O texto inteiro sai no idioma escolhido na hora de gerar, inclusive o resumo e o nome dos grupos de
+  competências. Os fatos chegam no idioma da base: traduza todos.
 - Nomes de empresas e de produtos não se traduzem. Instituições de ensino usam o nome oficial no idioma
   da saída ("Federal University of São Carlos" vira "Universidade Federal de São Carlos" em português, e o
   contrário em inglês). Nomes de certificações e de programas ficam no original. Siglas e termos técnicos

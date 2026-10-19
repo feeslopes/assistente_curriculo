@@ -5,5 +5,19 @@ gatherUsageStats = false
 headless = false
 fileWatcherType = "none"
 
+[client]
+# esconde o menu de desenvolvedor (botão "Deploy" e afins): quem usa não é desenvolvedora
+toolbarMode = "minimal"
+showSidebarNavigation = false
+
 [theme]
 base = "light"
+primaryColor = "#3F51B5"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F4F6FA"
+textColor = "#1F2937"
+linkColor = "#3F51B5"
+borderColor = "#E3E7EE"
+baseRadius = "0.6rem"
+showWidgetBorder = true
+font = "sans-serif"

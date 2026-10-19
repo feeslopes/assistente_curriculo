@@ -1,0 +1,101 @@
+"""Aparência: um pouco de CSS, o indicador de passos, etiquetas e os gráficos.
+
+O tema base (cores, cantos, fonte) está em .streamlit/config.toml. Aqui fica só o que o tema não cobre.
+"""
+from __future__ import annotations
+
+import html
+
+import streamlit as st
+
+COR = "#3F51B5"          # cor principal (igual ao primaryColor do tema)
+COR_ANTES = "#C3C9D4"    # cinza das barras "antes"
+
+_CSS = """
+<style>
+/* respiro e largura confortável de leitura */
+.block-container {padding-top: 2.2rem; padding-bottom: 4rem; max-width: 1100px;}
+h1, h2, h3, h4 {letter-spacing: -0.01em;}
+/* cabeçalho */
+.marca {display:flex; align-items:baseline; gap:.6rem; margin-bottom:.2rem;}
+.marca b {font-size:1.35rem;}
+.marca span {color:#6B7280; font-size:.92rem;}
+/* indicador de passos */
+.passos {display:flex; align-items:center; gap:.5rem; margin:.4rem 0 1.2rem 0; flex-wrap:wrap;}
+.passo {display:flex; align-items:center; gap:.45rem; color:#9CA3AF; font-weight:500; font-size:.95rem;}
+.passo .n {width:1.7rem; height:1.7rem; border-radius:50%%; display:inline-flex; align-items:center;
+           justify-content:center; border:2px solid #D1D5DB; font-size:.85rem;}
+.passo.atual {color:#1F2937;}
+.passo.atual .n {border-color:%(cor)s; background:%(cor)s; color:#fff;}
+.passo.feito {color:#4B5563;}
+.passo.feito .n {border-color:%(cor)s; color:%(cor)s;}
+.passo-linha {flex:0 0 2.2rem; height:2px; background:#E5E7EB;}
+/* etiquetas de palavras-chave */
+.chips {display:flex; flex-wrap:wrap; gap:.35rem; margin:.2rem 0 .6rem 0;}
+.chip {padding:.15rem .6rem; border-radius:999px; font-size:.85rem; border:1px solid transparent;}
+.chip.ok {background:#E8F5E9; color:#1B5E20; border-color:#C8E6C9;}
+.chip.tem {background:#FFF8E1; color:#7A4F01; border-color:#FFE082;}
+.chip.nao {background:#F3F4F6; color:#4B5563; border-color:#E5E7EB;}
+/* destaque da tela de boas-vindas */
+.hero h1 {font-size:2.1rem; margin-bottom:.3rem;}
+.hero p {font-size:1.08rem; color:#4B5563; margin-top:0;}
+/* pré-visualização do currículo: títulos no tamanho de um documento, não de uma página web */
+.st-key-previa h1 {font-size:1.7rem; margin-bottom:.2rem;}
+.st-key-previa h2 {font-size:1.1rem; margin-top:1rem; padding-bottom:.2rem; border-bottom:1px solid #E5E7EB;}
+.st-key-previa p, .st-key-previa li {font-size:.95rem;}
+.etapa-num {font-size:.8rem; color:%(cor)s; font-weight:600; text-transform:uppercase; letter-spacing:.04em;}
+</style>
+""" % {"cor": COR}
+
+
+def aplicar_css() -> None:
+    st.markdown(_CSS, unsafe_allow_html=True)
+
+
+def passos(rotulos: list[str], atual: int) -> None:
+    """Indicador de passos (1 = primeiro). Os anteriores aparecem como feitos."""
+    partes = []
+    for i, r in enumerate(rotulos, start=1):
+        classe = "atual" if i == atual else ("feito" if i < atual else "")
+        marca = "&#10003;" if i < atual else str(i)
+        if partes:
+            partes.append('<div class="passo-linha"></div>')
+        partes.append(f'<div class="passo {classe}"><span class="n">{marca}</span>{html.escape(r)}</div>')
+    st.markdown(f'<div class="passos">{"".join(partes)}</div>', unsafe_allow_html=True)
+
+
+def etiquetas(termos: list[str], tipo: str) -> None:
+    """Palavras em etiquetas. tipo: ok (verde), tem (amarelo), nao (cinza)."""
+    if termos:
+        chips = "".join(f'<span class="chip {tipo}">{html.escape(t)}</span>' for t in termos)
+        st.markdown(f'<div class="chips">{chips}</div>', unsafe_allow_html=True)
+
+
+def grafico_antes_depois(grupos: list[str], antes: list[float | None], depois: list[float | None],
+                         titulo_y: str = "% atingido", altura: int = 300) -> None:
+    """Barras verticais lado a lado: antes (cinza) e depois (cor), eixo fixo de 0 a 100 e valor em cima."""
+    import altair as alt  # tardio: só quem mostra gráfico precisa
+
+    linhas = []
+    for g, a, d in zip(grupos, antes, depois):
+        if a is not None:
+            linhas.append({"grupo": g, "serie": "Antes", "valor": round(a)})
+        if d is not None:
+            linhas.append({"grupo": g, "serie": "Depois", "valor": round(d)})
+    dados = alt.Data(values=linhas)
+    x = alt.X("grupo:N", title=None, sort=grupos, scale=alt.Scale(paddingInner=0.3),
+              axis=alt.Axis(labelAngle=0, labelLimit=160, labelFontSize=12))
+    deslocamento = alt.XOffset("serie:N", sort=["Antes", "Depois"], scale=alt.Scale(paddingInner=0.08))
+    y = alt.Y("valor:Q", title=titulo_y, scale=alt.Scale(domain=[0, 100]), axis=alt.Axis(grid=True, tickCount=5))
+    cor = alt.Color("serie:N", title=None, scale=alt.Scale(domain=["Antes", "Depois"], range=[COR_ANTES, COR]),
+                    legend=alt.Legend(orient="top", direction="horizontal", labelFontSize=12))
+    barras = alt.Chart(dados).mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4).encode(
+        x=x, xOffset=deslocamento, y=y, color=cor,
+        tooltip=[alt.Tooltip("grupo:N", title=" "), alt.Tooltip("serie:N", title=" "), alt.Tooltip("valor:Q", title="Valor")])
+    rotulos = alt.Chart(dados).mark_text(dy=-8, fontSize=12, color="#374151").encode(
+        x=x, xOffset=deslocamento, y=y, text="valor:Q")
+    grafico = (barras + rotulos).properties(height=altura).configure_view(strokeWidth=0)
+    # com poucos grupos (uma ou duas vagas), o gráfico ocupa só parte da largura: barras largas e longe uma da outra
+    # confundem mais do que ajudam
+    lugar = st.columns([len(grupos), 4 - len(grupos)])[0] if len(grupos) < 4 else st
+    lugar.altair_chart(grafico, use_container_width=True)

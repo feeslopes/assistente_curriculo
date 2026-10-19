@@ -114,40 +114,53 @@ Para testar a chave sem abrir o aplicativo, numa janela de terminal na pasta do 
 
 ## Usando o aplicativo, passo a passo
 
-O aplicativo tem quatro abas.
+Na primeira vez, o aplicativo abre numa tela de boas-vindas. Depois disso, há três áreas no menu de cima: **Meu histórico**, **Currículo para uma vaga** e **Minhas vagas**. As configurações técnicas (provedor, teste de conexão, pastas) ficam no botão de engrenagem, no canto.
 
-### 3. Minha base (comece por aqui, ou pela entrevista)
+### Primeira vez: comece pelo currículo que você já tem
 
-É a sua base de conhecimento. Preencha o **contato** (nome, telefone, e-mail, links). Esses dados só entram no cabeçalho do currículo e nunca vão para a IA. Aqui você também confirma ou remove os **fatos pendentes**, edita os arquivos e cria experiências à mão.
+1. **Envie o seu currículo** (PDF, Word, Markdown ou texto). Pode ser simples ou desatualizado. **Envie um só, em um idioma só:** o aplicativo traduz na hora de gerar, e um segundo currículo em outro idioma só criaria repetições.
+2. **Confira o que eu entendi.** Aparece tudo o que foi lido, aberto em cartões:
+   - **Seus dados** (nome, título, cidade, telefone, e-mail, LinkedIn), já preenchidos. Eles são lidos no seu computador, nunca vão para a IA e entram só no topo do currículo.
+   - **Cada experiência** num cartão, com cargo, empresa e datas editáveis e os itens marcados. As **sugestões da IA** vêm desmarcadas e com etiqueta: marque só se for verdade.
+   - Um botão só: **Salvar**. O que está marcado entra no seu histórico. O que ficou desmarcado fica guardado como **a confirmar**, fora dos currículos, até você decidir.
+3. Pronto: o histórico está montado. Agora é escolher uma vaga.
 
-Cada fato é uma linha de texto com uma marca:
+Se o currículo diz só o ano de uma experiência ("2016 – 2017"), fica só o ano: o aplicativo nunca inventa o mês. Se a IA tentar completar um mês que não está no texto, o código apaga e avisa.
 
-```text
-- [confirmado] Estruturou o funil de aquisição de um produto com 12 mil usuários ativos.
-- [sugerido] Reduziu o custo por lead em cerca de 20% (estimativa, confirmar como foi medido).
-```
+Não tem currículo? Use **Começar conversando**. Só quer ver como funciona? **Usar dados de exemplo** carrega uma pessoa fictícia.
 
-Só `[confirmado]` chega à IA e ao currículo. `[sugerido]` fica guardado até você confirmar ou remover. Linhas sem marca são ignoradas, e o aplicativo avisa quantas existem.
+### Meu histórico
 
-### 1. Entrevista
+Tudo o que o aplicativo sabe sobre você, em quatro seções:
 
-1. *(Opcional, mas recomendado)* Em **Importar um currículo existente**, envie o seu currículo atual (PDF, DOCX, MD ou TXT). **Importe um só, em um idioma só.** O aplicativo traduz para o idioma da vaga na hora de gerar, então um segundo currículo em outro idioma não acrescenta nada e criaria experiências e fatos duplicados. Se você importar um currículo em idioma diferente do da base, o aplicativo avisa, e se uma "nova experiência" tiver a mesma empresa e o mesmo início de uma que já existe, a revisão mostra um alerta. Nesses casos, descarte a revisão. Seu telefone, e-mail e LinkedIn são lidos no seu computador e vão para a aba Minha base, sem passar pela IA. Os fatos do currículo aparecem numa **revisão própria**: marque o que é verdade e clique em **Salvar**. **Enquanto você não salvar, nada do currículo está na sua base**, e a análise de vagas vai apontar como lacuna coisas que você tem.
-2. **Converse.** Com a base já preenchida, o entrevistador não repete o que já está nela: ele só pergunta o que falta (números, resultados, escopo, seções vazias). Uma pergunta por vez. Se você só tem uma estimativa, diga que é estimativa. Depois de umas 8 respostas, o aplicativo sugere encerrar a rodada. Dá para fazer outra rodada depois.
-3. Clique em **Encerrar rodada e revisar.** Você verá a lista de fatos que a IA entendeu.
-   - Fatos que **você disse** vêm marcados.
-   - Fatos que **a IA inferiu** vêm desmarcados. Marque só se for verdade.
-4. Salve com **Salvar marcados como confirmados**, ou com **Salvar marcados e guardar o resto como pendente**.
+- **Visão geral:** cada experiência num cartão, com todos os itens à vista. **Editar** abre o cartão para mudar cargo, datas e itens (um por linha). Itens *a confirmar* aparecem com **Confirmar** e **Remover** ao lado. O quadro **O que ainda falta** lista o que deixaria o histórico mais forte (números, formação, idiomas) e leva à conversa. Se faltam seus dados pessoais, um aviso leva direto para eles.
+- **Conversar para completar:** o entrevistador pergunta só o que falta, uma coisa por vez, sem repetir o que já está no histórico. Quando quiser, clique em **Salvar o que eu contei**: aparece a mesma conferência em cartões.
+- **Dados pessoais:** nome, contato e links.
+- **Avançado:** edição dos arquivos em texto e o registro das conversas com a IA.
 
-Se a IA completar uma data que você não disse (por exemplo, o mês), o aplicativo apaga o mês e pede que você preencha.
+Se um currículo ou uma conversa trouxer algo que **parece uma experiência que você já tem** (mesma empresa escrita de outro jeito, como "Mercado Livre" e "MercadoLibre", ou o mesmo período), a conferência avisa no cartão. Itens novos em outro idioma numa experiência existente também geram aviso: costumam ser os mesmos, só traduzidos.
 
-### 2. Currículo para uma vaga
+### Currículo para uma vaga
 
-1. **Cole o texto da vaga** (ou envie um arquivo) e clique em **Analisar vaga.** Você verá cada requisito como `coberto`, `parcial` ou `lacuna`, mais as palavras-chave da vaga.
-2. **Lacunas.** Para cada requisito sem prova na base, há uma pergunta. Responda **só o que for verdade**. Se você não tem a experiência, marque *Não tenho essa experiência*. Salve as respostas (elas passam pela mesma tela de revisão) e use **Reanalisar com a base atualizada**.
-3. **Idioma.** O aplicativo recomenda o idioma da vaga, mas a escolha é sua. Se o idioma for diferente do idioma da sua base, ele sugere a tradução dos cargos e você confirma ou edita cada uma.
-4. **Espaço de cada experiência.** Antes de gerar, o painel **Espaço de cada experiência** mostra quantos bullets cada cargo vai receber e por quê. O aplicativo segue a prática de um currículo experiente: as **recentes ganham mais espaço** e as **primeiras experiências da carreira ficam bem resumidas** (um bullet, ou só cargo e datas). A vaga ajusta isso: se a análise mostra que uma experiência antiga é relevante, ela ganha espaço de volta, e as recentes relevantes ganham um bullet a mais. Você pode corrigir o número de qualquer experiência, vaga por vaga (**0** mostra só cargo, empresa e datas).
-5. **Gerar currículo.** Aparece primeiro um **placar** (obrigatórios cobertos, palavras-chave com respaldo, lacunas, pontos a conferir) e o **Relatório da adaptação**, que explica como o currículo foi escrito para esta vaga (veja abaixo). Depois vêm os alertas, a cobertura de palavras-chave e o texto do currículo, que você pode **editar**. O PDF e o DOCX saem do texto que está na tela.
-6. **Baixe** o PDF, o DOCX ou o Markdown, ou use **Salvar na pasta de saídas** (cria `saidas/data-empresa-vaga/` com o currículo, a vaga, a análise e o `relatorio.md`).
+Três passos, com o indicador no topo:
+
+1. **A vaga.** Cole o texto completo (ou envie um arquivo) e clique em **Analisar vaga**.
+2. **Encaixe com o seu histórico.** Uma frase resume o encaixe ("o seu histórico comprova 5 de 9 requisitos obrigatórios"), e cada requisito aparece como **Comprovado**, **Em parte** ou **Não aparece no seu histórico**. Onde falta, a pergunta fica ao lado do próprio requisito, com **Não tenho**. Responda só o que for verdade; ao salvar, você confere em cartões e o encaixe se atualiza sozinho. As **palavras-chave da vaga** aparecem em etiquetas: verdes estão no seu histórico, cinzas não. Se a vaga pede quase nada do que você mostrou, o aplicativo diz isso com franqueza.
+3. **Currículo.** Escolha o idioma (o da vaga vem sugerido) e, se quiser, um título. Se os cargos estão em outro idioma no seu histórico, o aplicativo sugere a tradução e você confirma uma vez. **Ajustar o espaço de cada experiência** é opcional: as recentes e as mais ligadas à vaga ganham mais espaço, e as antigas ficam resumidas. Se faltam seu nome ou seu contato, um aviso aparece antes de gerar.
+
+Ao gerar, o currículo **é guardado sozinho** em Minhas vagas. A tela mostra:
+
+- **Aderência à vaga** (de 0 a 100), com a comparação com o currículo sem adaptar, o máximo possível com o seu histórico e um gráfico de barras por componente.
+- **Currículo:** a pré-visualização, **Baixar PDF**, **Baixar Word** e **Abrir a pasta**. **Editar o texto** permite ajustar; depois, **Salvar minha versão editada**.
+- **O que mudou:** o relatório da adaptação.
+- **Como melhorar:** o que aumentaria a aderência, separado entre o que o seu histórico já tem e o que só vale se for verdade.
+- **Conferir antes de enviar:** os alertas, o que foi tirado por falta de comprovação e de onde veio cada frase.
+
+### Minhas vagas
+
+Cada candidatura fica numa pasta com o nome da empresa e o mês, por exemplo `saidas/QuintoAndar_2026-10/`, e o currículo leva o seu nome no arquivo (`Curriculo_Ana_Souza.pdf`, com `_EN` quando em inglês). Outra vaga na mesma empresa e no mesmo mês ganha o título no nome da pasta. Gerar de novo para a mesma vaga regrava a mesma pasta.
+
+A área mostra um gráfico com a aderência antes e depois de cada vaga, um cartão por candidatura (PDF, Word, abrir a pasta, o que foi adaptado) e **o que várias vagas pedem e o seu histórico não mostra**: se for verdade, contar isso rende mais do que em qualquer vaga isolada.
 
 ### O relatório da adaptação
 
@@ -155,55 +168,50 @@ Para cada currículo gerado, o aplicativo explica **como ele foi escrito para aq
 
 | Parte | O que mostra | De onde vem |
 |---|---|---|
-| **Encaixe com a vaga** | Obrigatórios e desejáveis cobertos, parciais e lacunas; palavras-chave usadas com respaldo; as lacunas obrigatórias | Código, a partir da análise |
-| **Palavras-chave que a sua base sustenta** | Cada termo da vaga que a sua base comprova e **onde ele entrou** (Resumo, Competências, qual experiência), ou que a base tem e o currículo não usou | Código |
-| **Estratégia da adaptação** | O que a vaga mais valoriza, o que foi destacado, as trocas de vocabulário feitas e o que ficou de fora por falta de base ou de espaço | **IA** (rotulada como explicação, não faz parte do currículo) |
-| **Como cada parte foi escrita** | Para cada bullet: o texto final **ao lado do fato da base** de onde veio, e as palavras-chave da vaga que ele contém | Código |
-| **O que ficou de fora e por quê** | O que o sistema removeu, as palavras-chave sem base, as experiências resumidas | Código |
+| **Encaixe com a vaga** | Obrigatórios e desejáveis comprovados, em parte e lacunas; palavras-chave usadas com respaldo | Código, a partir da análise |
+| **Palavras-chave que o seu histórico sustenta** | Cada termo da vaga que o histórico comprova e **onde ele entrou** (Resumo, Competências, qual experiência) | Código |
+| **Estratégia da adaptação** | O que a vaga mais valoriza, o que foi destacado, as trocas de vocabulário e o que ficou de fora | **IA** (rotulada como explicação, não faz parte do currículo) |
+| **Como cada parte foi escrita** | Para cada bullet: o texto final **ao lado da informação do histórico** de onde veio | Código |
+| **O que ficou de fora e por quê** | O que o sistema tirou, as palavras-chave sem base, as experiências resumidas | Código |
 | **Pontos a conferir** | Os alertas | Código e IA fiscal |
 
-A estratégia vem da IA e pode errar ao descrever o que fez. Por isso o relatório sempre mostra o **fato da base ao lado do texto final**: você confere sozinho se o bullet foi só traduzido ou se foi realmente reescrito para a vaga.
+A estratégia vem da IA e pode errar ao descrever o que fez. Por isso o relatório sempre mostra a **informação do histórico ao lado do texto final**.
 
-A adaptação em si funciona assim: a análise da vaga identifica quais palavras-chave a sua base sustenta (com os fatos que as sustentam) e quais não. O gerador recebe as duas listas, com a ordem de **usar o termo exato da vaga** onde um fato diz a mesma coisa com outras palavras ("squad multidisciplinar" vira "cross-functional squad" se a vaga usa esse termo), de **priorizar** os bullets com palavras-chave sustentadas e de **nunca usar** uma palavra sem base.
+A adaptação em si funciona assim: a análise da vaga identifica quais palavras-chave o seu histórico sustenta (com as informações que as sustentam) e quais não. O gerador recebe as duas listas, com a ordem de **usar o termo exato da vaga** onde uma informação diz a mesma coisa com outras palavras ("devoluções" pode virar "logística reversa" se a vaga usa esse termo), de **priorizar** os bullets com palavras-chave sustentadas e de **nunca usar** uma palavra sem base. Um termo assim aceito vale tanto nos bullets quanto nas competências, e o fiscal por IA confere todos.
 
-### O índice de aderência (antes e depois)
+### O índice de aderência
 
-Logo abaixo de **Resultado** aparece o **índice de aderência à vaga**, de 0 a 100, com três números: **Antes** (o seu currículo-base, sem adaptação), **Depois** (o currículo gerado, que acompanha o que você edita) e o **Teto com a sua base atual**.
-
-**Isto não é a nota de nenhum ATS.** Essas notas não são públicas e cada sistema calcula a sua. É um índice nosso, calculado pelo código do mesmo jeito para os dois currículos:
+**Isto não é a nota de nenhum ATS.** Essas notas não são públicas e cada sistema calcula a sua. É um índice nosso, calculado pelo código do mesmo jeito para o currículo sem adaptar e para o gerado:
 
 | Componente | Peso | O que conta |
 |---|---|---|
-| Palavras-chave da vaga | 45 | Só as que **a sua base sustenta** e que aparecem no texto. Palavra que a base não sustenta não pontua, mesmo que esteja escrita no currículo |
-| Requisitos obrigatórios | 30 | Coberto vale 1, parcial vale 0,5, e só quando o **fato que o sustenta está de fato no texto** |
-| Requisitos desejáveis | 10 | Igual aos obrigatórios |
-| Estrutura legível por ATS | 15 | Seções convencionais, contato no cabeçalho, páginas dentro do limite |
+| Palavras-chave | 45 | Só as que **o seu histórico sustenta** e que aparecem no texto |
+| Obrigatórios | 30 | Comprovado vale 1, em parte vale 0,5, e só quando a **informação que o sustenta está no texto** |
+| Desejáveis | 10 | Igual aos obrigatórios |
+| Formato | 15 | Seções convencionais, contato no topo, páginas dentro do limite |
 
-Se a vaga não tem desejáveis, os outros pesos se reescalam. O **antes** é montado sem IA: os fatos confirmados na ordem da base, com os mesmos limites de espaço. O **teto** é o índice se o texto usasse tudo o que a sua base já sustenta; acima dele, só com fatos novos e verdadeiros.
+Se a vaga não tem desejáveis, os outros pesos se reescalam. O **currículo sem adaptar** é montado sem IA: as informações confirmadas na ordem do histórico, com os mesmos limites de espaço. O **máximo com o seu histórico** é o índice se o texto usasse tudo o que o histórico já sustenta; acima dele, só com informações novas e verdadeiras.
 
-Por isso **o índice não sobe por inventar**: nenhum componente conta o que a base não comprova. O quadro **Como melhorar a aderência sem inventar** separa três tipos de ação:
+**O índice não sobe por inventar:** palavra que o histórico não sustenta não pontua, mesmo escrita no currículo, e frase que o fiscal por IA apontou como exagero também não conta. Em **Como melhorar**, cada ação traz o ganho aproximado:
 
-- **A base já sustenta, mas o texto não usa** (ganho garantido, é só incluir);
-- **Precisa confirmar** (só vale se você de fato fez; se não fez, deixe de fora);
-- **Estrutura** (contato faltando, página a mais).
+- **O seu histórico já tem, mas o texto não usa** (ganho garantido, é só incluir);
+- **Parecidas com o que você tem, mas não iguais** (a IA ligou o termo a algo do histórico, mas as palavras não batem: Excel não é Google Sheets; use só se for exatamente o que você fez);
+- **Não estão no seu histórico** e **requisitos sem comprovação** (só valem se você de fato fez);
+- **Formato** (contato faltando, página a mais).
 
-Cada item mostra o ganho aproximado em pontos. Se o currículo-base está num idioma e a vaga em outro, a comparação de palavras-chave é estimada pelos fatos que cada versão usa, e a tela avisa.
+Quando vaga e currículo estão em idiomas diferentes, as palavras-chave são estimadas pelas informações que cada versão usa, e a tela avisa.
 
-### 4. Minhas vagas
-
-Cada currículo salvo com **Salvar na pasta de saídas** entra aqui, com o índice de antes, depois e teto (`indice.json` na pasta da vaga). A aba mostra um gráfico por vaga, a lista com data, empresa e notas, e permite reabrir qualquer uma (relatório, PDF, DOCX, Markdown). Ela também aponta **o que se repete nas vagas e a sua base não sustenta**: se um requisito ou uma palavra-chave aparece sem base em várias vagas, confirmar um fato verdadeiro sobre isso rende mais do que em qualquer vaga isolada. Se você não fez, deixe de fora.
-
-### Como ler os alertas e a cobertura
+### Como ler os alertas
 
 | O que aparece | O que significa |
 |---|---|
-| *Removido por não ter fato confirmado de apoio* | A IA escreveu algo que nenhum fato seu sustenta. Saiu do currículo. Se for verdade, confirme o fato na aba Minha base. |
-| *Número não aparece na base* | Um número do texto não existe nos seus fatos. Confira antes de usar. |
-| *A verificação por IA aponta algo sem respaldo* | Um segundo passo de IA achou um exagero (por exemplo, "fluente" onde você escreveu "avançado"). A frase continua no texto, mas você é avisado. |
-| *Competências removidas* | Termos que nenhum fato sustenta saíram da lista de competências. |
+| *Tirado do currículo por falta de comprovação* | A IA escreveu algo que nenhuma informação sua sustenta. Saiu do currículo. Se for verdade, acrescente em Meu histórico. |
+| *Número não aparece no histórico* | Um número do texto não existe no seu histórico. Confira antes de usar. |
+| *A verificação por IA aponta algo sem respaldo* | Um segundo passo de IA achou um exagero (por exemplo, "fluente" onde você disse "avançado", ou "garantindo o SLA" pendurado num fato que não fala disso). A frase continua no texto, mas você é avisado, e ela não conta no índice. |
+| *Este trecho saiu em português, mas o currículo é em inglês* | A IA esqueceu de traduzir uma parte. Gere de novo ou corrija editando. |
+| *Competências removidas* / *nome do grupo tirado* | Termos ou nomes de grupo ("Liderança de equipes") que nenhuma informação sustenta. |
 | *Cargos sem versão no idioma* | Falta confirmar a tradução de algum cargo. |
 | *Experiência ficou de fora* | A IA não aproveitou uma experiência. Isso pode deixar um buraco no seu histórico. |
-| **Cobertura de palavras-chave** | `Usadas`: estão no currículo e a base sustenta. `A base tem, mas não usou`: dá para incluir editando. `Ficaram de fora por falta de base`: você não comprovou, e é assim que deve ser, a menos que responda nas lacunas. |
 
 ---
 
@@ -230,11 +238,11 @@ C4Container
   title Currículo sob medida: contêineres
   Person(voce, "Você")
   System_Boundary(pc, "Seu computador") {
-    Container(web, "Interface web", "Streamlit, arquivo app.py", "Três abas: Entrevista, Currículo para uma vaga e Minha base")
+    Container(web, "Interface web", "Streamlit, app.py e pasta interface", "Três áreas: Meu histórico, Currículo para uma vaga e Minhas vagas")
     Container(logica, "Lógica e regras", "Python, pasta src", "Entrevista, análise da vaga, geração, verificações e exportação")
     Container(regras, "Prompts e regras de escrita", "Markdown e YAML", "Pasta prompts, guidelines.md e config.yaml. Você pode editar")
     ContainerDb(base, "Base de conhecimento", "Arquivos Markdown e YAML, pasta base", "Fatos confirmados e pendentes, e o contato")
-    ContainerDb(saidas, "Currículos e registro", "PDF, DOCX, MD e JSONL, pasta saidas", "Um subdiretório por vaga e o registro das chamadas à IA")
+    ContainerDb(saidas, "Currículos e registro", "PDF, DOCX, MD e JSONL, pasta saidas", "Uma pasta Empresa_AAAA-MM por vaga e o registro das chamadas à IA")
   }
   System_Ext(ia, "Provedor de IA", "API compatível com OpenAI")
   Rel(voce, web, "Usa no navegador")
@@ -252,7 +260,7 @@ O C4 oficial para este nível usa um diagrama experimental. Aqui está o equival
 ```mermaid
 flowchart LR
   subgraph UI["Interface"]
-    app["app.py: abas, formulários, botões"]
+    app["app.py e interface/: áreas, cartões, passos, gráficos"]
   end
   subgraph Fluxos["Fluxos de negócio"]
     interview["interview.py: entrevista, extração e revisão"]
@@ -333,7 +341,7 @@ sequenceDiagram
   participant K as Base (arquivos)
   participant IA as Provedor de IA
 
-  V->>UI: Abre a aba Entrevista
+  V->>UI: Abre Meu histórico, Conversar para completar
   UI-->>V: Mostra uma abertura fixa, sem chamar a IA
   loop A cada resposta sua
     V->>UI: Escreve a resposta
@@ -344,7 +352,7 @@ sequenceDiagram
     L-->>UI: Pergunta
     UI-->>V: Mostra a pergunta
   end
-  V->>UI: Clica em Encerrar rodada e revisar
+  V->>UI: Clica em Salvar o que eu contei
   UI->>L: extrair_da_conversa
   L->>IA: Instruções do extrator e a conversa
   IA-->>L: Propostas de fatos, em JSON
@@ -463,9 +471,10 @@ sequenceDiagram
   UI->>E: gerar_docx
   E-->>UI: DOCX
   UI-->>V: Avisa se passou do limite de páginas e mostra os botões de download
-  opt Salvar na pasta de saídas
-    V->>UI: Clica em Salvar
-    UI->>S: curriculo.md, curriculo.pdf, curriculo.docx, vaga.txt e analise.json
+  UI->>S: Guarda sozinho em Empresa_AAAA-MM: Curriculo_Nome.pdf, .docx e .md, vaga, análise, relatório e índice
+  opt Editou o texto
+    V->>UI: Clica em Salvar minha versão editada
+    UI->>S: Regrava os arquivos da mesma pasta
   end
 ```
 
@@ -527,14 +536,14 @@ A IA fiscal é uma segunda chamada ao modelo. Ela dá um **veredito para cada it
 | "O modelo não existe nesse provedor" | Deixe `MODELO=` em branco no `.env`, ou peça a quem emprestou a chave o nome certo. |
 | "Limite de uso do provedor atingido" ou análise muito demorada | O aplicativo já tenta de novo sozinho. Espere cerca de um minuto. Se o DeepSeek estiver fora do ar ou sem saldo, nada funciona até voltar. |
 | "Resposta vazia" ou "JSON inválido" | O modelo é fraco demais ou gastou tudo pensando. Tente de novo ou troque de modelo. |
-| A análise diz que eu não tenho algo que eu tenho | A análise só enxerga fatos **confirmados**. Confira se você salvou a revisão do currículo importado (aba Entrevista), se há fatos pendentes (aba Minha base) e se a base tem as experiências, a formação e as habilidades. O aplicativo mostra esses avisos no topo da aba da vaga. |
-| O entrevistador pergunta o que já está no meu currículo | Quase sempre é porque a revisão do currículo importado não foi salva. Salve, e a conversa passa a perguntar só o que falta. |
+| A análise diz que eu não tenho algo que eu tenho | A análise só enxerga o que está **confirmado**. Confira se você salvou a conferência do currículo lido, se há itens *a confirmar* em Meu histórico e se o histórico tem as experiências, a formação e as habilidades. O aplicativo mostra esses avisos no primeiro passo da vaga. |
+| O entrevistador pergunta o que já está no meu currículo | Quase sempre é porque a conferência do currículo lido não foi salva. Salve, e a conversa passa a perguntar só o que falta. |
 | "A verificação por IA não rodou" | O currículo saiu sem o segundo passo de conferência. Leia com mais atenção, ou gere de novo. |
 | O PDF importado "não tem texto" | É um PDF escaneado (imagem). Envie uma versão em texto ou use DOCX. |
 | O PDF passou do limite de páginas | Corte conteúdo editando, ou mude `max_paginas` e `bullets_por_experiencia` no `config.yaml`. |
 | A porta 8501 está ocupada | Feche a janela preta de uma execução anterior e abra de novo. |
-| Fechei o aplicativo no meio da conversa | Abra de novo. A conversa e as revisões não salvas voltam sozinhas, com um aviso no topo. Para recomeçar do zero, use **Começar uma conversa nova**. |
-| Quero ver o que a IA recebeu e respondeu | Aba **Minha base**, item **Registro das interações com a IA**, ou a pasta `saidas/logs`. |
+| Fechei o aplicativo no meio da conversa | Abra de novo. A conversa e as revisões não salvas voltam sozinhas, com um aviso no topo. Para recomeçar do zero, use **Recomeçar a conversa**. |
+| Quero ver o que a IA recebeu e respondeu | **Meu histórico**, seção **Avançado**, ou a pasta `saidas/logs`. |
 | Quero fazer backup | Copie a pasta `base/`. É tudo o que importa. |
 | Quero mais (ou menos) espaço para as experiências antigas | No painel **Espaço de cada experiência**, vaga por vaga, ou no `config.yaml`: `bullets_por_experiencia` (por posição) e `experiencias_antigas` (`anos`, `mais_antigas`, `max_bullets`, `max_bullets_relevante`; `ativo: false` desliga a regra de antiguidade). |
 | Quero mudar o jeito que o currículo é escrito | Edite o `guidelines.md` (tom, verbos, estilo) ou o `config.yaml` (limites, ordem e nome das seções). |
@@ -598,7 +607,15 @@ Decisões que o briefing original não cobria, tomadas durante o desenvolvimento
 - **O relatório separa o que o código prova do que a IA conta**, e a correspondência de termos aceita singular e plural.
 - **Espaço por experiência decidido pelo código e ajustável.** Parte de um limite por posição (mais recente, mais espaço). Experiências antigas (terminaram há mais de 10 anos, ou as 2 mais antigas de um histórico com ao menos 3 recentes) ficam com 1 bullet, a menos que a análise da vaga as torne relevantes (peso 2: um requisito obrigatório ou dois desejáveis apoiados nelas), caso em que ganham até 3. Recentes relevantes ganham 1 a mais, até o limite da mais recente. Limite 0 mostra só cargo, empresa e datas e não gera alerta de "buraco" no histórico, porque foi escolha sua. O modelo recebe o limite de cada experiência e a instrução de escrever um resumo denso quando o limite é baixo.
 - **Índice de aderência próprio, nunca "nota de ATS".** Só conta palavra-chave que a base sustenta e requisito cujo fato de apoio está no texto, então inventar não sobe o número. O "antes" é o currículo-base montado sem IA. Quando vaga e currículo estão em idiomas diferentes, as palavras-chave são estimadas pelos fatos usados, e isso é dito na tela.
-- **Histórico em arquivos.** `indice.json` ao lado de cada currículo salvo; a aba Minhas vagas lê a pasta `saidas/`. Currículos salvos antes deste recurso aparecem sem índice.
+- **Histórico em arquivos.** `indice.json` ao lado de cada currículo salvo; a área Minhas vagas lê a pasta `saidas/`, uma pasta `Empresa_AAAA-MM` por candidatura, gravada sozinha a cada geração. Currículos salvos antes deste recurso aparecem sem índice.
+- **Interface guiada.** Primeiro uso começa pelo currículo existente; depois, três áreas (Meu histórico, Currículo para uma vaga, Minhas vagas). Conferências em cartões, com tudo à vista, e um botão só para salvar: desmarcado fica guardado *a confirmar*. A vaga em três passos, só o atual aberto.
+- **A versão adaptada não pode ficar abaixo da original.** A pontuação do currículo sem adaptar aparece antes de gerar. Se a versão adaptada pontuar menos, o gerador recebe uma segunda chance com a lista do que deixou de fora, e fica a melhor das duas. Se mesmo assim ficar abaixo, a tela avisa e oferece **Usar a versão sem adaptar**. O "original" é o currículo montado com o histórico confirmado, não o arquivo enviado: só ele tem a ligação de cada frase com uma informação confirmada, e sem isso a comparação não seria justa.
+- **Termos duvidosos passam pelo fiscal.** Palavra-chave que a análise deu como comprovada, mas que as informações citadas não dizem com as mesmas palavras ("treinou 15 operadores" e "gestão de equipes"), é julgada pelo fiscal por IA na mesma chamada. Se ele não confirma, o termo não conta no índice nem fica nas competências. Termo que está escrito no histórico conta mesmo se a análise esquecer dele.
+- **Feito para a tela do computador.** No celular funciona, mas o menu de cima não cabe inteiro.
+- **Datas só com ano são aceitas.** Currículo real costuma ter "2016 – 2017". Exigir o mês obrigaria a pessoa a inventar um.
+- **Salvar é tudo ou nada.** Se uma experiência nova tem um problema (data inválida, empresa vazia), nada é gravado e a tela diz o que corrigir.
+- **Duplicatas por semelhança.** Experiência nova com empresa de nome parecido ou no mesmo período de uma existente gera aviso na conferência. O app não junta nada sozinho.
+- **Termos aceitos pela análise valem em todo o currículo.** Um sinônimo que a análise ligou a uma informação do histórico passa no filtro das competências também, e o fiscal por IA confere. Nomes de grupo de competências também passam pelo fiscal.
 - **Extrator conservador.** Só o que você afirmou vem marcado. Qualquer origem desconhecida conta como sugestão.
 - **Sem banco de dados, login ou servidor.** Tudo em arquivos locais.
 
