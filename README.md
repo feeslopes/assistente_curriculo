@@ -73,6 +73,19 @@ python verificar.py --modelos  # lista os modelos que a sua chave enxerga
 
 Ele confere o Python, os pacotes, as pastas, a geração de PDF e DOCX, a conexão com o provedor e se o modelo devolve JSON. Cada problema aparece como `[FALHOU]`, com a dica do que fazer.
 
+### Atualizações
+
+**Você não precisa fazer nada.** Sempre que você abre o aplicativo pelo `iniciar.bat` (ou `iniciar.sh`), ele confere se há uma versão nova publicada. Se houver, ele:
+
+1. guarda uma cópia do aplicativo atual e uma do seu histórico na pasta `backups/` (as 3 mais recentes);
+2. baixa a versão nova e troca só os arquivos do aplicativo;
+3. instala bibliotecas novas, se a versão pedir;
+4. abre normalmente e mostra, uma vez, "atualizado para a versão X" com o que mudou.
+
+**O seu histórico (`base/`), os seus currículos (`saidas/`) e a sua chave (`.env`) nunca são tocados.** Se algo der errado no meio, o aplicativo desfaz a troca sozinho e abre na versão de antes. Sem internet, ele só abre na versão que você tem. A versão instalada aparece no botão de engrenagem.
+
+Na primeira vez, se a sua cópia é anterior a esta função, baixe o aplicativo de novo pelo GitHub (botão verde **Code**, **Download ZIP**) e copie para a pasta nova as pastas `base/` e `saidas/` e o arquivo `.env` da pasta antiga. Daí em diante, as atualizações são automáticas.
+
 ---
 
 ## Configurando a chave de API (arquivo `.env`)
@@ -293,6 +306,9 @@ flowchart LR
     candidaturas["candidaturas.py: situação, sugestões e taxas"]
     saidas["saidas.py: pastas Empresa_AAAA-MM"]
   end
+  subgraph Atualizacao["Atualização"]
+    atualizador["atualizar.py e atualizador.py: instala a versão publicada mais nova"]
+  end
   subgraph Infra["Infraestrutura"]
     llm["llm.py: cliente único, retry, máscara de contato"]
     texto["texto.py: idioma, JSON, leitura de PDF e DOCX, datas"]
@@ -318,6 +334,7 @@ flowchart LR
   render --> kb
   render --> verify
   historico --> candidaturas
+  telas --> atualizador
   llm --> texto
   kb --> texto
   interview --> config
@@ -527,6 +544,38 @@ sequenceDiagram
   Note over UI,C: O app só sugere. Nenhuma situação muda sozinha
 ```
 
+### Sequência 7: atualização automática
+
+```mermaid
+sequenceDiagram
+  actor V as Você
+  participant I as iniciar (bat ou sh)
+  participant A as atualizar.py
+  participant G as GitHub (versões publicadas)
+  participant P as Pasta do aplicativo
+
+  V->>I: Dois cliques
+  I->>A: Antes de abrir o aplicativo
+  A->>G: Qual é a última versão publicada?
+  alt Sem internet, nada novo, ou pasta de desenvolvimento (git)
+    A-->>I: Segue com a versão atual
+  else Há versão mais nova
+    A->>P: Cópia do código atual e do histórico em backups/
+    A->>G: Baixa o zip da versão
+    A->>P: Troca só os arquivos do aplicativo (base, saidas, .env e .venv ficam intactos)
+    opt As bibliotecas mudaram
+      A->>P: pip install
+    end
+    alt Algo falhou
+      A->>P: Desfaz tudo a partir da cópia
+    else Deu certo
+      A->>P: Registra a versão instalada e o aviso
+    end
+  end
+  I->>V: Abre o aplicativo (e mostra, uma vez, o que mudou)
+  Note over I,P: O iniciar.bat novo é trocado no fim do script, porque o Windows lê o .bat enquanto ele roda
+```
+
 ### Como a base é organizada
 
 ```text
@@ -628,6 +677,8 @@ interface/        as telas: início, painel, histórico, vaga, currículo geral,
 verificar.py      diagnóstico para rodar na máquina do usuário
 iniciar.bat       duplo clique no Windows
 iniciar.sh        Linux (e Mac): bash iniciar.sh
+atualizar.py      chamado pelo iniciar: instala a versão publicada mais nova (lógica em src/atualizador.py)
+VERSAO            número da versão do código; precisa bater com a tag da Release
 prompts/          entrevistador, extrator, analisador, gerador, verificador, tradutor_cargos
 src/              regras e fluxos: ver o diagrama de componentes acima
 tests/            unittest, com LLM falso, sessão HTTP falsa e streamlit falso
@@ -643,6 +694,21 @@ python -m unittest discover -s tests -t .
 ```
 
 Os testes da interface usam um Streamlit falso: simulam cliques e conferem o que é mostrado e gravado, mas não o visual. O comportamento real da tela precisa ser conferido **rodando o aplicativo**. Para testar sem mexer nos seus dados, aponte `CV_BASE_DIR` para uma pasta de teste; lembre que gerar um currículo grava em `saidas/`.
+
+### Publicar uma versão nova (atualização automática)
+
+A instalação dela só recebe **versões publicadas** (Releases do GitHub), nunca cada mudança na `main`. Para publicar:
+
+1. Na `main` já com tudo mesclado, troque o número no arquivo `VERSAO` (por exemplo, de `v1.0.0` para `v1.1.0`), faça commit e envie.
+2. Crie a Release com a **mesma tag**. As notas aparecem para ela dentro do aplicativo: escreva em português simples, pensando nela.
+
+```bash
+gh release create v1.1.0 --title "v1.1.0" --notes "Início novo, acompanhamento de candidaturas e currículo geral."
+```
+
+Ou pelo site: **Releases**, **Draft a new release**, tag `v1.1.0`, título e notas, **Publish release**.
+
+A comparação é por número (`v1.10.0` é mais nova que `v1.9.3`). O atualizador não roda numa pasta com `.git` (a sua, de desenvolvimento) e pode ser desligado com `CV_NAO_ATUALIZAR=1`. Ele guarda em `.manifesto` a lista de arquivos de cada versão, para apagar na próxima os que saíram; `backups/`, `.versao_instalada`, `.manifesto` e `.atualizacao.json` ficam fora do Git.
 
 ### Antes de subir para o GitHub
 
@@ -685,6 +751,7 @@ Decisões que o briefing original não cobria, tomadas durante o desenvolvimento
 - **Acompanhamento de candidaturas com um clique e sem automação.** A situação é marcada pela pessoa; o aplicativo só sugere "Sem retorno" depois de 21 dias (`config.yaml`, bloco `candidaturas`). Nada de integração com e-mail ou LinkedIn: exigiria login, servidor e dados de terceiros, e o aplicativo roda só no computador dela.
 - **Taxas só com dados suficientes.** Taxa de resposta a partir de 5 candidaturas enviadas; relação entre aderência e resultado a partir de 20, rotulada como indício. Com menos, os números mudam demais a cada resposta e pareceriam conclusão.
 - **Currículo geral com foco opcional.** Sem nenhum alvo, um currículo tende a não servir para nada; o foco (ou o objetivo do histórico) orienta o que vem primeiro. Não tem índice de aderência, porque não há vaga.
+- **Atualização automática só de versões publicadas.** O `iniciar` instala sozinho a Release mais nova, sem perguntar, porque uma pergunta na janela preta confunde quem não usa terminal. Antes, guarda cópia do código e do histórico; qualquer falha desfaz a troca. Atualizar a cada mudança na `main` foi descartado: um merge para testar viraria atualização na máquina dela. O código baixado vem do repositório do responsável: vale manter a verificação em duas etapas ligada na conta do GitHub.
 - **Feito para a tela do computador.** No celular funciona, mas o menu de cima não cabe inteiro.
 - **Datas só com ano são aceitas.** Currículo real costuma ter "2016 – 2017". Exigir o mês obrigaria a pessoa a inventar um.
 - **Salvar é tudo ou nada.** Se uma experiência nova tem um problema (data inválida, empresa vazia), nada é gravado e a tela diz o que corrigir.

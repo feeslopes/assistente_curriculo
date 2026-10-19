@@ -8,7 +8,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from src import config, registro, sessao
+from src import atualizador, config, registro, sessao
 from src.kb import KB, ErroBase
 from src.llm import LLM, Configuracao, ErroConfig, ErroLLM
 
@@ -47,6 +47,14 @@ def estado_inicial() -> None:
             if salvo["rev_importacao"] or salvo["rev_entrevista"]:
                 partes.append("o que ainda estava para você conferir")
             st.session_state["msg"] = ("info", "Continuei de onde você parou: recuperei " + " e ".join(partes) + ".")
+        # Atualização instalada pelo `iniciar` desde a última vez: avisa uma vez, com as notas da versão.
+        aviso = atualizador.aviso_pendente(config.RAIZ)
+        if aviso:
+            notas = aviso.get("notas", "").strip()
+            texto = (f"O aplicativo foi atualizado para a versão **{aviso['para']}**. O seu histórico e os seus currículos "
+                     "continuam como estavam." + (f"\n\n**O que mudou:**\n\n{notas[:600]}" if notas else ""))
+            anterior = st.session_state.get("msg")
+            st.session_state["msg"] = ("success", texto + (f"\n\n{anterior[1]}" if anterior else ""))
     # Navegação pedida por um botão na execução anterior (o menu é um widget: só pode mudar antes de ser desenhado).
     if "_ir_para" in st.session_state:
         st.session_state["area"] = st.session_state.pop("_ir_para")
