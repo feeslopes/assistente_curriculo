@@ -126,6 +126,7 @@ class TestApp(unittest.TestCase):
 
     def test_sem_chave_explica_como_ligar_e_o_historico_continua(self):
         with mock.patch.dict(os.environ, {"DEEPSEEK_API_KEY": "", "PROVEDOR": "deepseek"}):
+            self.ir("historico")
             self.rodar()                       # Meu histórico funciona sem IA
             self.assertIn("Experiências", self.textos("metric"))
             self.ir("vaga")
@@ -174,6 +175,7 @@ class TestApp(unittest.TestCase):
         self.assertIn("guardada(s) para confirmar depois", self.st.session_state["msg"][1])
 
     def test_descartar_a_leitura(self):
+        self.ir("historico")
         self.usar_llm(proposta(("Fato novo.", "dito")))
         self.st.uploads["up_dialogo"] = stub.ArquivoFalso("cv.txt", CV_PT.encode("utf-8"))
         self.clicar("btn_ler_cv", "btn_up_dialogo")
@@ -191,6 +193,7 @@ class TestApp(unittest.TestCase):
         self.assertEqual(self.st.session_state["area"], "historico")
 
     def test_curriculo_em_outro_idioma_avisa_duplicacao(self):
+        self.ir("historico")
         self.usar_llm(proposta(("Uses Excel for reporting.", "dito")))
         self.st.uploads["up_dialogo"] = stub.ArquivoFalso("cv_en.txt", CV_EN.encode("utf-8"))
         self.clicar("btn_ler_cv", "btn_up_dialogo")
@@ -207,16 +210,19 @@ class TestApp(unittest.TestCase):
 
     # ------------------------------------------------------------------ meu histórico
     def test_cartoes_mostram_os_itens_sem_menu_escondido(self):
+        self.ir("historico")
         self.rodar()
         texto = self.textos("markdown")
         self.assertIn("Estruturou o funil de aquisição", texto)      # item de uma experiência, à vista
         self.assertFalse(any(c[0] == "expander" for c in self.st.chamadas))
 
     def test_confirmar_um_item_no_cartao(self):
+        self.ir("historico")
         self.clicar(f"conf_{SLUG_ATUAL}#6")
         self.assertEqual(self.kb.fato(f"{SLUG_ATUAL}#6").status, "confirmado")
 
     def test_editar_experiencia_no_cartao(self):
+        self.ir("historico")
         self.clicar(f"ed_{SLUG_ESTAG}")
         self.assertEqual(self.st.session_state["editando"], SLUG_ESTAG)
         v = self.st.session_state["base_v"]
@@ -227,11 +233,13 @@ class TestApp(unittest.TestCase):
         self.assertIsNone(self.st.session_state["editando"])
 
     def test_nova_experiencia_com_data_invalida_mostra_erro(self):
+        self.ir("historico")
         self.st.valores.update({"ne_cargo": "Analista", "ne_empresa": "Acme", "ne_inicio": "03/2020", "ne_fim": "atual"})
         self.clicar("btn_nova_exp", "Adicionar")
         self.assertIn("AAAA-MM", self.textos("error"))
 
     def test_nova_experiencia_com_itens(self):
+        self.ir("historico")
         self.st.valores.update({"ne_cargo": "Analista", "ne_empresa": "Acme", "ne_inicio": "2015-01",
                                 "ne_fim": "2016-02", "ne_itens": "Fez relatórios.\nAtendeu clientes."})
         self.clicar("btn_nova_exp", "Adicionar")
@@ -462,6 +470,7 @@ class TestApp(unittest.TestCase):
         self.assertIn("A base não tem experiência na área da vaga.", self.textos("info"))
 
     def test_falta_de_dados_pessoais_aparece_antes_de_gerar_e_no_historico(self):
+        self.ir("historico")
         self.kb.salvar_contato({})
         self.rodar()
         self.assertIn("Faltam seus dados pessoais", self.textos("warning"))
@@ -485,6 +494,80 @@ class TestApp(unittest.TestCase):
         self.clicar("btn_nova_conversa")      # o botão só existe dentro da confirmação
         self.assertEqual(self.st.session_state["chat"], [])
 
+    # ------------------------------------------------------------------ início, candidaturas e currículo geral
+    def test_quem_volta_cai_no_inicio_com_as_duas_acoes(self):
+        self.rodar()
+        texto = self.textos("markdown")
+        self.assertIn("Olá, Mariana", texto)
+        self.assertIn("Currículo para uma vaga", texto)
+        self.assertIn("Currículo geral", texto)
+        self.assertIn("Nenhuma candidatura ainda", self.textos("caption"))
+        # o histórico de exemplo tem 2 itens a confirmar e uma experiência com poucos detalhes
+        self.assertIn("2 informação(ões) do seu histórico ainda a confirmar", texto)
+        self.assertIn("ponto(s) a completar", texto)
+
+    def test_curriculo_geral_pelo_inicio(self):
+        llm = self.usar_llm(gerado_bom(), FISCAL_OK)
+        self.clicar("ini_geral")
+        self.rodar()
+        self.assertEqual((self.st.session_state["area"], self.st.session_state["modo_curriculo"]), ("vaga", "geral"))
+        self.clicar("btn_gerar_geral")
+        self.assertEqual([c["rotulo"] for c in llm.chamadas], ["gerador", "verificador"])
+        pasta = next((self.tmp / "saidas").iterdir())
+        self.assertTrue(pasta.name.startswith("Geral_"))
+        self.st.chamadas.clear()
+        self.rodar()
+        self.assertNotIn("Aderência à vaga", self.textos("metric"))      # sem vaga, sem aderência
+        nomes = [c[1][0] for c in self.st.chamadas if c[0] == "download_button"]
+        self.assertIn("Baixar PDF", nomes)
+
+    def test_marcar_situacao_e_anotacao_no_cartao(self):
+        self.gerar_para_a_vaga()
+        pasta = next((self.tmp / "saidas").iterdir())
+        self.ir("vagas")
+        self.st.valores[f"sit_{pasta.name}"] = "enviado"
+        self.st.valores[f"nota_{pasta.name}"] = "Recrutadora: Ana"
+        self.rodar()
+        from src import candidaturas
+        d = candidaturas.ler(pasta)
+        self.assertEqual((d["situacao"], d["anotacao"]), ("enviado", "Recrutadora: Ana"))
+        self.assertTrue(d["enviado_em"])
+
+    def test_inicio_sugere_sem_retorno_e_marca_com_um_clique(self):
+        self.gerar_para_a_vaga()
+        pasta = next((self.tmp / "saidas").iterdir())
+        (pasta / "candidatura.json").write_text(json.dumps({"situacao": "enviado", "enviado_em": "2026-01-01",
+                                                           "historico": []}), encoding="utf-8")
+        self.ir("inicio")
+        self.rodar()
+        self.assertIn("sem resposta registrada", self.textos("markdown"))
+        self.clicar(f"ini_sr_{pasta.name}")
+        from src import candidaturas
+        self.assertEqual(candidaturas.ler(pasta)["situacao"], "sem_retorno")
+
+    def test_inicio_mostra_onde_se_desenvolver(self):
+        self.gerar_para_a_vaga(analise_bruta(), gerado_bom(), FISCAL_OK, gerado_bom(), FISCAL_OK)
+        self.clicar("btn_outra_vaga")                    # segunda vaga, com as mesmas lacunas
+        self.st.valores["vaga_texto"] = VAGA_PT + "\nOutra empresa."
+        self.clicar("btn_analisar")
+        self.st.valores.pop("vaga_texto")
+        self.clicar("btn_para_gerar")
+        self.clicar("btn_gerar")
+        self.ir("inicio")
+        self.st.chamadas.clear()
+        self.rodar()
+        texto = self.textos("markdown")
+        self.assertIn("Onde se desenvolver para aumentar suas chances", texto)
+        self.assertIn("Looker Studio", texto)
+        self.assertIn("pedido em 2 de 2 vagas", texto)
+        self.assertIn("Ainda não tem?", texto)
+
+    def test_taxa_de_resposta_nao_aparece_com_poucos_dados(self):
+        self.gerar_para_a_vaga()
+        self.ir("inicio")
+        self.rodar()
+        self.assertIn("A taxa de resposta aparece a partir de 5", self.textos("caption"))
+
     def test_vaga_sem_historico_confirmado_orienta(self):
         with mock.patch.dict(os.environ, {"CV_BASE_DIR": str(self.tmp / "so-contato")}):
             KB(self.tmp / "so-contato").salvar_contato({"nome": "Ana"})
@@ -496,7 +579,7 @@ class TestApp(unittest.TestCase):
     def test_minhas_vagas_vazia_orienta(self):
         self.ir("vagas")
         self.rodar()
-        self.assertIn("Nenhuma vaga ainda", self.textos("markdown"))
+        self.assertIn("Nenhuma candidatura ainda", self.textos("markdown"))
 
     def test_minhas_vagas_lista_com_grafico_e_downloads(self):
         self.gerar_para_a_vaga()

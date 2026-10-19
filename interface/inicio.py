@@ -97,6 +97,6 @@ def boas_vindas(kb: KB, config_erro: str | None) -> None:
             if exemplo.copiar_exemplo(kb):
                 st.session_state["base_v"] += 1
                 comum.avisar("success", "Dados de exemplo carregados. Veja o histórico abaixo e, depois, experimente "
-                                        "uma vaga em **Currículo para uma vaga**.")
+                                        "uma vaga em **Novo currículo**.")
             comum.ir_para("historico", vista="visao")
             st.rerun()

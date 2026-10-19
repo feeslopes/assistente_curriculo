@@ -245,6 +245,33 @@ def gerar(llm, kb: KB, vaga: str, analise: dict, idioma: str, cfg: dict | None =
     return res
 
 
+def analise_geral(idioma: str, foco: str = "") -> dict:
+    """Uma "análise" vazia para o currículo geral: sem vaga, sem palavras-chave, sem requisitos."""
+    foco = " ".join((foco or "").split())
+    return {"titulo_vaga": foco or "Currículo geral", "empresa": "", "idioma_vaga": idioma, "palavras_chave": [],
+            "palavras_chave_base": [], "requisitos": [], "observacoes": "", "geral": True, "foco": foco}
+
+
+def texto_geral(foco: str = "") -> str:
+    """O que vai no lugar da vaga, para o gerador saber que não há vaga e qual é o foco."""
+    alvo = f"Foco: {foco.strip()}." if foco and foco.strip() else \
+        "Foco: o objetivo profissional descrito na base (perfil); se não houver, o cargo mais recente."
+    return ("Currículo geral, sem uma vaga específica (por exemplo, para enviar a um contato ou a uma empresa que pediu "
+            f"um currículo). {alvo} Mostre os resultados mais fortes e mais recentes, com o vocabulário da própria base. "
+            "Não há palavras-chave de vaga para usar.")
+
+
+def gerar_geral(llm, kb: KB, idioma: str, cfg: dict | None = None, foco: str = "",
+                titulo_usuario: str | None = None) -> tuple[Resultado, dict, str]:
+    """Currículo sem vaga, pelo mesmo caminho (só fatos confirmados, fiscal, alertas). Devolve (resultado, análise, texto).
+
+    Não há aderência a medir: a tela mostra o currículo e o que conferir, sem índice.
+    """
+    analise, texto = analise_geral(idioma, foco), texto_geral(foco)
+    res = gerar(llm, kb, texto, analise, idioma, cfg, titulo_usuario)
+    return res, analise, texto
+
+
 def _gerar_uma_vez(llm, kb: KB, vaga: str, analise: dict, idioma: str, cfg: dict, titulo_usuario: str | None,
                    verificar_ia: bool, limites_manuais: dict[str, int] | None, correcao: str | None) -> Resultado:
     if not kb.ids_confirmados():

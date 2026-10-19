@@ -221,16 +221,24 @@ def _pasta_da_vaga(vaga: str):
     return chave, st.session_state["pastas_por_vaga"].get(chave)
 
 
-def _salvar(kb: KB, res, markdown: str, comp: dict | None) -> None:
-    """Grava a candidatura na pasta desta vaga (cria na primeira vez, regrava depois)."""
-    analise, vaga = st.session_state["analise"], st.session_state["vaga_analisada"]
+def contexto_vaga() -> dict:
+    """De onde a tela de resultado lê: a vaga analisada (aqui) ou o currículo geral (interface/geral.py)."""
+    s = st.session_state
+    return {"analise": s["analise"], "vaga": s["vaga_analisada"], "res": s["resultado"], "chave_res": "resultado",
+            "geral": False}
+
+
+def _salvar(kb: KB, res, markdown: str, comp: dict | None, ctx: dict | None = None) -> None:
+    """Grava na pasta desta vaga (cria na primeira vez, regrava depois)."""
+    ctx = ctx or contexto_vaga()
+    analise, vaga = ctx["analise"], ctx["vaga"]
     pdf, _ = export.gerar_pdf(markdown)
     docx = export.gerar_docx(markdown)
     chave, pasta = _pasta_da_vaga(vaga)
     nome = saidas.nome_do_arquivo(kb.contato().get("nome", ""), res.aderencia.get("idioma_depois", "pt"))
     pasta = saidas.salvar_saida(markdown, pdf, docx, vaga, analise, pasta=pasta, nome_arquivo=nome,
                                 relatorio=relatorio.para_markdown(res.relatorio) if res.relatorio else None,
-                                indice=historico.dados_do_indice(analise, comp) if comp else None)
+                                indice=historico.dados_do_indice(analise, comp) if comp and not ctx["geral"] else None)
     st.session_state["pastas_por_vaga"][chave] = pasta
     st.session_state["md_salvo"] = markdown
 
@@ -314,7 +322,8 @@ def bloco_aderencia(comp: dict) -> None:
                 [100 * depois["componentes"][k]["fracao"] for k in chaves], altura=260)
 
 
-def vista_curriculo(kb: KB, res, cfg: dict, texto_atual: str, comp: dict | None) -> None:
+def vista_curriculo(kb: KB, res, cfg: dict, texto_atual: str, comp: dict | None, ctx: dict | None = None) -> None:
+    ctx = ctx or contexto_vaga()
     gid = st.session_state["gen_id"]
     try:
         pdf, paginas = export.gerar_pdf(texto_atual)
@@ -324,7 +333,7 @@ def vista_curriculo(kb: KB, res, cfg: dict, texto_atual: str, comp: dict | None)
         pdf = docx = None
         paginas = 0
     nome = saidas.nome_do_arquivo(kb.contato().get("nome", ""), res.aderencia.get("idioma_depois", "pt") if res.aderencia else "pt")
-    _, pasta = _pasta_da_vaga(st.session_state["vaga_analisada"])
+    _, pasta = _pasta_da_vaga(ctx["vaga"])
     barra = st.container(horizontal=True, vertical_alignment="center")
     if pdf:
         barra.download_button("Baixar PDF", pdf, file_name=f"{nome}.pdf", mime="application/pdf", key="dl_pdf",
@@ -337,7 +346,7 @@ def vista_curriculo(kb: KB, res, cfg: dict, texto_atual: str, comp: dict | None)
     limite = int(cfg.get("max_paginas", 2))
     info = f"{paginas} página(s)." if paginas <= limite else f"**{paginas} páginas**: passa do limite de {limite}. Corte algum trecho."
     if pasta:
-        info += f" Guardado em Minhas vagas, na pasta **{pasta.name}**."
+        info += f" Guardado em Minhas candidaturas, na pasta **{pasta.name}**."
     st.caption(info)
     editar = st.toggle("Editar o texto", key=f"editar_{gid}")
     if editar:
@@ -354,9 +363,9 @@ def vista_curriculo(kb: KB, res, cfg: dict, texto_atual: str, comp: dict | None)
         with st.container(border=True, key="previa"):
             st.markdown(texto_atual)
     if texto_atual != st.session_state.get("md_salvo") and pdf:
-        if st.button("Guardar esta versão em Minhas vagas", key="btn_salvar_edicao", icon=":material/save:"):
-            _salvar(kb, res, texto_atual, comp)
-            comum.avisar("success", "Esta versão foi guardada em Minhas vagas.")
+        if st.button("Guardar esta versão", key="btn_salvar_edicao", icon=":material/save:"):
+            _salvar(kb, res, texto_atual, comp, ctx)
+            comum.avisar("success", "Esta versão foi guardada em Minhas candidaturas.")
             st.rerun()
 
 
@@ -411,16 +420,17 @@ def vista_conferir(kb: KB, res) -> None:
             st.markdown(f"- {r['texto']}  \n  :gray[{origem}]")
 
 
-def resultado(kb: KB, cfg: dict) -> None:
-    res = st.session_state["resultado"]
+def resultado(kb: KB, cfg: dict, ctx: dict | None = None) -> None:
+    ctx = ctx or contexto_vaga()
+    res = ctx["res"]
     gid = st.session_state["gen_id"]
     cv = res.curriculo
-    analise = st.session_state["analise"]
+    analise = ctx["analise"]
     texto_atual = st.session_state.get(f"texto_{gid}") or cv.markdown
     usando_original = bool(res.aderencia) and texto_atual == res.aderencia.get("markdown_antes")
     rastro = res.aderencia.get("rastro_antes", cv.rastro) if usando_original else cv.rastro
     comp = None
-    if res.aderencia:
+    if res.aderencia and not ctx["geral"]:     # currículo geral: sem vaga, não há aderência a medir
         try:
             paginas = export.gerar_pdf(texto_atual)[1]
         except Exception:
@@ -446,6 +456,9 @@ def resultado(kb: KB, cfg: dict) -> None:
     if "_vista_res" in st.session_state:
         st.session_state["vista_resultado"] = st.session_state.pop("_vista_res")
     rotulos = dict(VISTAS)
+    if ctx["geral"]:
+        rotulos.pop("melhorar")
+        rotulos["mudou"] = ":material/compare_arrows: Como foi escrito"
     if cv.alertas:
         rotulos["conferir"] += f" ({len(cv.alertas)})"
     vista = st.segmented_control("Ver", list(rotulos), format_func=rotulos.get, key="vista_resultado",
@@ -454,18 +467,18 @@ def resultado(kb: KB, cfg: dict) -> None:
         st.download_button("Baixar este relatório", relatorio.para_markdown(res.relatorio), file_name="relatorio.md",
                            mime="text/markdown", key="dl_relatorio", icon=":material/download:")
         st.markdown(relatorio.para_markdown(res.relatorio, com_titulo=False))
-    elif vista == "melhorar":
+    elif vista == "melhorar" and not ctx["geral"]:
         vista_melhorar(res, comp)
     elif vista == "conferir":
         vista_conferir(kb, res)
     else:
-        vista_curriculo(kb, res, cfg, texto_atual, comp)
+        vista_curriculo(kb, res, cfg, texto_atual, comp, ctx)
     st.divider()
     fim = st.container(horizontal=True)
     if fim.button("Mudar opções e gerar de novo", key="btn_gerar_de_novo", icon=":material/tune:"):
-        st.session_state["resultado"] = None
+        st.session_state[ctx["chave_res"]] = None
         st.rerun()
-    if fim.button("Fazer para outra vaga", key="btn_outra_vaga", icon=":material/add:"):
+    if not ctx["geral"] and fim.button("Fazer para outra vaga", key="btn_outra_vaga", icon=":material/add:"):
         st.session_state.update(analise=None, resultado=None, passo_vaga=1, vaga_texto="")
         st.rerun()
 
@@ -480,14 +493,25 @@ def passo_curriculo(kb: KB, cfg: dict, analise: dict) -> None:
 
 # ------------------------------------------------------------------ área
 
+MODOS = {"vaga": ":material/work: Para uma vaga", "geral": ":material/description: Geral, sem vaga"}
+
+
 def area(kb: KB, cfg: dict, config_erro: str | None) -> None:
-    st.markdown("### Currículo para uma vaga")
+    st.markdown("### Novo currículo")
     if config_erro:
         comum.tela_sem_ia(config_erro)
         return
     if not kb.ids_confirmados():
         st.info("Primeiro, monte o seu histórico em **Meu histórico**: é dele que saem os currículos.",
                 icon=":material/arrow_back:")
+        return
+    if "_modo" in st.session_state:      # pedido do painel: o seletor só muda antes de ser desenhado
+        st.session_state["modo_curriculo"] = st.session_state.pop("_modo")
+    modo = st.segmented_control("Tipo", list(MODOS), format_func=MODOS.get, key="modo_curriculo",
+                                label_visibility="collapsed", on_change=comum.sem_desmarcar("modo_curriculo")) or "vaga"
+    if modo == "geral":
+        from . import geral   # tardio: geral reaproveita a tela de resultado deste módulo
+        geral.tela(kb, cfg)
         return
     analise = st.session_state["analise"]
     passo = st.session_state["passo_vaga"] if analise else 1
