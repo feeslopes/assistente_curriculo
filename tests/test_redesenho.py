@@ -310,5 +310,88 @@ class TestNaoPiorar(unittest.TestCase):
         self.assertTrue(res.abaixo_do_original)
 
 
+class TestCaberNasPaginas(unittest.TestCase):
+    """Passou do limite de páginas: o gerador condensa, e a nota máxima não é puxada para baixo por isso."""
+
+    def setUp(self):
+        self.kb, self.tmp = base_exemplo()
+        self.cfg = {**config.carregar_config(), "max_paginas": 1}
+        self.analise = tailor.validar_analise(analise_bruta(), self.kb.ids_confirmados())
+        self.fiscal = {"itens": [], "palavras": []}
+
+    def tearDown(self):
+        limpar(self.tmp)
+
+    @staticmethod
+    def curto():
+        g = gerado_bom()
+        g["competencias"] = [{"grupo": "Mídia paga e dados", "itens": "Google Ads, Meta Ads, SQL",
+                              "fontes": ["habilidades#2", "habilidades#3"]}]
+        return g
+
+    @classmethod
+    def comprido(cls):
+        g = cls.curto()
+        enchimento = " ".join(["detalhe"] * 160)
+        for exp in g["experiencias"]:
+            for b in exp["bullets"]:
+                b["texto"] += " " + enchimento
+        return g
+
+    def gerar(self, *respostas):
+        llm = LLMFalso(*respostas)
+        return llm, tailor.gerar(llm, self.kb, "Vaga", self.analise, "pt", self.cfg)
+
+    def test_passou_do_limite_pede_texto_mais_curto_e_fica_com_o_que_cabe(self):
+        llm, res = self.gerar(self.comprido(), self.fiscal, self.curto(), self.fiscal)
+        geracoes = [c for c in llm.chamadas if c["rotulo"] == "gerador"]
+        self.assertEqual(len(geracoes), 2)
+        self.assertIn("Correção (tamanho)", geracoes[1]["mensagens"][1]["content"])
+        self.assertTrue(res.condensada)
+        self.assertEqual(res.aderencia["depois"]["paginas"], 1)
+
+    def test_o_pedido_de_geracao_informa_o_limite_de_paginas(self):
+        llm = LLMFalso(self.curto())
+        tailor.gerar(llm, self.kb, "Vaga", self.analise, "pt", self.cfg, verificar_ia=False)
+        self.assertIn("caber em 1 página", llm.chamadas[0]["mensagens"][0]["content"])
+
+    def test_se_nao_couber_mesmo_assim_o_aviso_fica_e_nao_ha_terceira_chamada_sem_fim(self):
+        llm, res = self.gerar(self.comprido(), self.fiscal, self.comprido(), self.fiscal, self.comprido(), self.fiscal)
+        self.assertLessEqual(len([c for c in llm.chamadas if c["rotulo"] == "gerador"]), 3)
+        self.assertGreater(res.aderencia["depois"]["paginas"], 1)
+
+    def test_a_segunda_tentativa_de_corte_tira_um_bullet_da_experiencia_que_menos_pesa(self):
+        llm, _ = self.gerar(self.comprido(), self.fiscal, self.comprido(), self.fiscal, self.comprido(), self.fiscal)
+        geracoes = [c for c in llm.chamadas if c["rotulo"] == "gerador"]
+        self.assertEqual(len(geracoes), 3)
+        antes = geracoes[1]["mensagens"][0]["content"]
+        depois = geracoes[2]["mensagens"][0]["content"]
+        self.assertNotEqual(antes, depois)
+
+    def test_sem_ia_nao_ha_condensacao(self):
+        llm = LLMFalso(self.comprido())
+        res = tailor.gerar(llm, self.kb, "Vaga", self.analise, "pt", self.cfg, verificar_ia=False)
+        self.assertEqual(len(llm.chamadas), 1)
+        self.assertFalse(res.condensada)
+
+    def test_o_maximo_nao_perde_pontos_pelo_limite_de_paginas(self):
+        res = tailor.gerar(LLMFalso(gerado_bom()), self.kb, "Vaga", self.analise, "pt", self.cfg, verificar_ia=False)
+        md, rastro = res.curriculo.markdown, res.curriculo.rastro
+        cabe = aderencia.calcular(self.analise, md, rastro, self.kb, self.cfg, "pt", paginas=1)
+        estoura = aderencia.calcular(self.analise, md, rastro, self.kb, self.cfg, "pt", paginas=3)
+        self.assertLess(estoura["total"], cabe["total"])      # a nota cai
+        self.assertEqual(estoura["teto"], cabe["teto"])       # o máximo, não
+
+    def test_estimativa_de_tamanho_cresce_com_os_bullets_e_a_vaga_ordena_os_fatos(self):
+        poucos = {e.slug: 1 for e in self.kb.experiencias()}
+        muitos = {e.slug: 5 for e in self.kb.experiencias()}
+        self.assertLess(aderencia.estimar_palavras(self.kb, self.cfg, poucos),
+                        aderencia.estimar_palavras(self.kb, self.cfg, muitos))
+        self.analise["palavras_chave_base"].append({"termo": "funil", "evidencias": [f"{SLUG_ATUAL}#1"]})
+        valorizados = tailor.fatos_valorizados_por_experiencia(self.kb, self.analise)
+        self.assertTrue(all(0 <= v <= t for v, t in valorizados.values()))
+        self.assertTrue(any(v for v, _ in valorizados.values()))
+
+
 if __name__ == "__main__":
     unittest.main()

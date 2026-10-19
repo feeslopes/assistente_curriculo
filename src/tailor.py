@@ -29,6 +29,7 @@ class Resultado:
                                                                 # e o fiscal não confirmou
     segunda_tentativa: bool = False    # a primeira versão pontuou abaixo da original e foi refeita
     abaixo_do_original: bool = False   # mesmo assim ficou abaixo: a tela oferece a versão sem adaptar
+    condensada: bool = False           # passou do limite de páginas e foi refeita mais curta
 
 
 # ------------------------------------------------------------------------ análise
@@ -145,6 +146,26 @@ def relevancia_por_experiencia(analise: dict | None) -> dict[str, int]:
     return pesos
 
 
+def ids_valorizados(analise: dict | None) -> set[str]:
+    """Ids dos fatos que a vaga valoriza: os que comprovam uma palavra-chave ou um requisito coberto ou parcial."""
+    a = analise or {}
+    ids = {i for p in a.get("palavras_chave_base", []) for i in p.get("evidencias", [])}
+    for r in a.get("requisitos", []):
+        if r.get("status") in ("coberto", "parcial"):
+            ids.update(r.get("evidencias", []))
+    return ids
+
+
+def fatos_valorizados_por_experiencia(kb: KB, analise: dict | None) -> dict[str, tuple[int, int]]:
+    """{slug: (fatos que a vaga valoriza, total de fatos confirmados)}, para a pessoa decidir quanto espaço dar."""
+    valorizados = ids_valorizados(analise)
+    saida = {}
+    for e in kb.experiencias():
+        fatos = [f for f in kb.fatos("confirmado") if f.slug == e.slug]
+        saida[e.slug] = (sum(f.id in valorizados for f in fatos), len(fatos))
+    return saida
+
+
 def limites_por_experiencia(kb: KB, cfg: dict, analise: dict | None = None, hoje: date | None = None) -> dict[str, dict]:
     """Quantos bullets cada experiência recebe nesta vaga: {slug: {"limite": n, "motivo": texto}}.
 
@@ -193,7 +214,11 @@ def _limites(cfg: dict, kb: KB, limites: dict[str, dict]) -> str:
         "- Experiência com limite 1 ou 2 é um RESUMO: escreva bullets curtos e densos que sintetizem a função e o "
         "resultado mais relevante para a vaga, sem repetir o que as experiências recentes já dizem. Limite 0: devolva "
         "`bullets` vazio (o sistema mostra só cargo e datas).\n"
-        "O sistema corta o que passar desses limites."
+        "O sistema corta o que passar desses limites.\n"
+        f"- Tamanho: o currículo inteiro precisa caber em {int(cfg.get('max_paginas', 2))} página(s) A4, ou seja, cerca de "
+        f"{aderencia.PALAVRAS_POR_PAGINA * int(cfg.get('max_paginas', 2)) - 40} palavras somando tudo. Se os fatos não "
+        "couberem, CONDENSE: junte fatos parecidos num bullet só e escreva com menos palavras. Não troque uma "
+        "palavra-chave da vaga por outro detalhe só para economizar espaço."
     )
 
 
@@ -222,6 +247,8 @@ def gerar(llm, kb: KB, vaga: str, analise: dict, idioma: str, cfg: dict | None =
     """
     cfg = cfg or config.carregar_config()
     res = _gerar_uma_vez(llm, kb, vaga, analise, idioma, cfg, titulo_usuario, verificar_ia, limites_manuais, correcao)
+    if verificar_ia and correcao is None:      # primeiro o tamanho: passar de página também derruba a nota
+        res = _caber_nas_paginas(llm, kb, vaga, analise, idioma, cfg, titulo_usuario, limites_manuais, res)
     antes, depois = res.aderencia["antes"], res.aderencia["depois"]
     if depois["total"] >= antes["total"]:
         return res
@@ -239,9 +266,64 @@ def gerar(llm, kb: KB, vaga: str, analise: dict, idioma: str, cfg: dict | None =
         except ErroLLM:
             segunda = None
         if segunda and segunda.aderencia["depois"]["total"] > depois["total"]:
+            segunda.condensada = res.condensada
             res = segunda
             res.segunda_tentativa = True
     res.abaixo_do_original = res.aderencia["depois"]["total"] < res.aderencia["antes"]["total"]
+    return res
+
+
+def _palavras_na_ultima_pagina(markdown: str) -> int | None:
+    from . import export
+    try:
+        import io
+
+        from pypdf import PdfReader
+        paginas = PdfReader(io.BytesIO(export.gerar_pdf(markdown)[0])).pages
+        return len(paginas[-1].extract_text().split())
+    except Exception:    # só melhora a mensagem para o gerador: sem isso o pedido segue sem o número
+        return None
+
+
+def _caber_nas_paginas(llm, kb: KB, vaga: str, analise: dict, idioma: str, cfg: dict, titulo_usuario: str | None,
+                       limites_manuais: dict[str, int] | None, res: Resultado) -> Resultado:
+    """Se o PDF passou do limite de páginas, pede ao gerador que condense (até duas vezes).
+
+    O texto é que se ajusta: as palavras-chave que a base sustenta continuam valendo. Na segunda tentativa, a
+    experiência que menos pesa na vaga perde também um bullet. Fica a versão que cabe; se nenhuma couber, a que
+    tem menos páginas e, em empate, a de maior pontuação.
+    """
+    limite = int(cfg.get("max_paginas", 2))
+
+    def chave(r: Resultado) -> tuple:
+        pg = r.aderencia["depois"].get("paginas") or 0
+        return (pg <= limite, -pg if pg > limite else 0, r.aderencia["depois"]["total"])
+
+    pesos = relevancia_por_experiencia(analise)
+    manuais = {slug: v["limite"] for slug, v in res.limites.items()}
+    manuais.update(limites_manuais or {})
+    for tentativa in range(2):
+        paginas = res.aderencia["depois"].get("paginas") or 0
+        if paginas <= limite:
+            break
+        sobra = _palavras_na_ultima_pagina(res.curriculo.markdown)
+        pedido = (f"## Correção (tamanho)\nO PDF ficou com {paginas} páginas e o limite é {limite}"
+                  + (f" (a última tem só {sobra} palavras)" if sobra is not None else "") + ". Reescreva o currículo "
+                  "inteiro mais curto: junte fatos parecidos num bullet só, tire detalhes secundários e use frases "
+                  "mais enxutas. Mantenha as palavras-chave da vaga que a base sustenta e use só os mesmos fatos.")
+        if tentativa == 1:
+            # precisa de mais corte: a experiência que menos pesa na vaga (e a mais antiga em empate) perde um bullet
+            candidatas = [e for e in kb.experiencias() if manuais.get(e.slug, 0) >= 2]
+            if candidatas:
+                menos = min(reversed(candidatas), key=lambda e: pesos.get(e.slug, 0))
+                manuais[menos.slug] -= 1
+        try:
+            nova = _gerar_uma_vez(llm, kb, vaga, analise, idioma, cfg, titulo_usuario, True, manuais, pedido)
+        except ErroLLM:
+            break
+        if chave(nova) > chave(res):
+            res = nova
+            res.condensada = True
     return res
 
 
