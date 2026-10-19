@@ -1,18 +1,39 @@
-"""Teste de fumaça do app.py com streamlit falso. Pega erro de import, de nome e de desempacotamento."""
+"""Testes da interface com um streamlit falso: fluxos, cliques e o que é gravado.
+
+O comportamento visual de verdade (layout, gráficos) precisa ser conferido rodando o aplicativo.
+"""
 import importlib
 import json
 import os
 import sys
 import unittest
+from datetime import date
 from unittest import mock
 
+import altair  # noqa: F401  carregado uma vez: o patch de sys.modules não pode forçar um segundo import do numpy
+
+from src import config
+from src.interview import FatoProposto, Proposta
+from src.kb import KB
 from tests import streamlit_stub as stub
-from tests.fakes import RAIZ, LLMFalso, base_exemplo, limpar
+from tests.fakes import RAIZ, SLUG_ATUAL, SLUG_ESTAG, LLMFalso, base_exemplo, limpar
 from tests.test_render import gerado_bom
 from tests.test_tailor import analise_bruta
 
 VAGA_PT = (RAIZ / "exemplo" / "vagas" / "vaga_pt.txt").read_text(encoding="utf-8")
 ENV_COM_CHAVE = {"PROVEDOR": "deepseek", "DEEPSEEK_API_KEY": "chave-de-teste", "MODELO": "m"}
+CV_PT = "Ana Souza\nAnalista\nana@exemplo.com | +55 11 98888-7777\n" + "Trabalhou com análise de dados e relatórios. " * 5
+CV_EN = "Mariana Example\nMarketing Analyst\n" + "Worked with the team on paid media campaigns and reporting for the company. " * 4
+FISCAL_OK = {"itens": [], "palavras": []}
+
+
+def proposta(*fatos, destino="habilidades"):
+    return {"propostas": [{"destino": destino, "meta": {}, "fatos": [{"texto": t, "origem": o} for t, o in fatos]}]}
+
+
+def _descarregar():
+    for nome in [m for m in sys.modules if m == "app" or m == "interface" or m.startswith("interface.")]:
+        sys.modules.pop(nome, None)
 
 
 class TestApp(unittest.TestCase):
@@ -20,25 +41,29 @@ class TestApp(unittest.TestCase):
         self.st = stub.FakeStreamlit()
         self.patch_mod = mock.patch.dict(sys.modules, {"streamlit": self.st})
         self.patch_mod.start()
-        sys.modules.pop("app", None)
+        _descarregar()
         self.app = importlib.import_module("app")
         self.kb, self.tmp = base_exemplo()
         self.env = mock.patch.dict(os.environ, {**ENV_COM_CHAVE, "CV_BASE_DIR": str(self.kb.base)}, clear=False)
         self.env.start()
-        self.sem_env = mock.patch.object(self.app.config, "carregar_env", lambda: None)
+        self.sem_env = mock.patch.object(config, "carregar_env", lambda: None)
         self.sem_env.start()
-        # nunca ler nem gravar a pasta saidas/ real do projeto (tem logs do uso de verdade)
-        self.saidas = mock.patch.object(self.app.config, "saidas_dir", lambda: self.tmp / "saidas")
+        # nunca ler nem gravar a pasta saidas/ real do projeto (tem currículos e logs de uso de verdade)
+        self.saidas = mock.patch.object(config, "saidas_dir", lambda: self.tmp / "saidas")
         self.saidas.start()
+        self.abrir = mock.patch("interface.comum.abrir_pasta", lambda p: True)   # não abrir janelas nos testes
+        self.abrir.start()
 
     def tearDown(self):
+        self.abrir.stop()
         self.saidas.stop()
         self.sem_env.stop()
         self.env.stop()
         self.patch_mod.stop()
-        sys.modules.pop("app", None)
+        _descarregar()
         limpar(self.tmp)
 
+    # ------------------------------------------------------------------ apoio
     def rodar(self):
         """Uma execução do script. st.rerun() interrompe, como no Streamlit de verdade."""
         try:
@@ -48,7 +73,7 @@ class TestApp(unittest.TestCase):
 
     def usar_llm(self, *respostas):
         llm = LLMFalso(*respostas)
-        p = mock.patch.object(self.app, "obter_llm", lambda kb: llm)
+        p = mock.patch.object(sys.modules["interface.comum"], "obter_llm", lambda kb: llm)
         p.start()
         self.addCleanup(p.stop)
         return llm
@@ -56,330 +81,214 @@ class TestApp(unittest.TestCase):
     def textos(self, nome):
         return " ".join(str(c[1][0]) for c in self.st.chamadas if c[0] == nome and c[1])
 
-    # ------------------------------------------------------------------ casos
-    def test_tela_inicial_com_base_de_exemplo(self):
-        self.rodar()
-        self.assertEqual(self.st.session_state["rev_id"], 0)
+    def chamou(self, nome):
+        return any(c[0] == nome for c in self.st.chamadas)
 
-    def test_sem_chave_mostra_configuracao_e_aba_base_continua(self):
-        with mock.patch.dict(os.environ, {"DEEPSEEK_API_KEY": "", "PROVEDOR": "deepseek"}):
-            self.rodar()
-        self.assertIn("ainda não está ligado", self.textos("warning"))
+    def ir(self, area, vista=None):
+        self.st.session_state["area"] = area
+        if vista:
+            self.st.session_state["vista_historico"] = vista
 
-    def test_base_vazia(self):
-        with mock.patch.dict(os.environ, {"CV_BASE_DIR": str(self.tmp / "vazia")}):
-            self.rodar()
-            self.assertIn("ainda não tem fatos confirmados", self.textos("info"))
-
-    def test_copiar_exemplo_so_se_vazia(self):
-        with mock.patch.dict(os.environ, {"CV_BASE_DIR": str(self.tmp / "nova")}):
-            self.st.cliques = {"btn_exemplo"}
-            self.rodar()
-            self.assertTrue((self.tmp / "nova" / "contato.yaml").exists())
-            self.rodar()  # segundo clique: base já tem dados
-        self.st.cliques = {"btn_exemplo"}
-        self.rodar()
-        self.assertIn("já tem dados", json.dumps(self.st.session_state.get("msg") or "", ensure_ascii=False))
-
-    def test_fluxo_analisar_e_gerar(self):
-        llm = self.usar_llm(analise_bruta(), gerado_bom(), {"problemas": [], "palavras": []})
-        self.st.valores["vaga_texto"] = VAGA_PT
-        self.st.cliques = {"btn_analisar"}
-        self.rodar()
-        self.assertIsNotNone(self.st.session_state["analise"])
-        self.st.cliques = {"btn_gerar"}
-        self.rodar()
-        res = self.st.session_state["resultado"]
-        self.assertIsNotNone(res)
-        self.assertIn("Mariana Exemplo", self.st.session_state[f"md_{self.st.session_state['gen_id']}"])
-        self.st.cliques = set()
-        self.rodar()   # mostra resultado, alertas, cobertura e botões de download
-        nomes = [c[1][0] for c in self.st.chamadas if c[0] == "download_button"]
-        self.assertEqual(nomes[-3:], ["Baixar PDF", "Baixar DOCX", "Baixar Markdown"])
-        self.assertEqual(len(llm.chamadas), 3)
-
-    def test_salvar_saida(self):
-        self.usar_llm(analise_bruta(), gerado_bom(), {"problemas": [], "palavras": []})
-        self.st.valores["vaga_texto"] = VAGA_PT
-        self.st.cliques = {"btn_analisar"}
-        self.rodar()
-        self.st.cliques = {"btn_gerar"}
-        self.rodar()
-        with mock.patch.object(self.app.config, "saidas_dir", lambda: self.tmp / "saidas"):
-            self.st.cliques = {"btn_salvar_saida"}
-            self.rodar()
-        pastas = list((self.tmp / "saidas").iterdir())
-        self.assertEqual(len(pastas), 1)
-        self.assertTrue(all((pastas[0] / f).exists() for f in ("curriculo.pdf", "curriculo.docx", "curriculo.md",
-                                                                 "vaga.txt", "analise.json")))
-
-    def test_indice_aparece_no_resultado_e_o_historico_lista_a_vaga_salva(self):
-        self.usar_llm(analise_bruta(), gerado_bom(), {"problemas": [], "palavras": []})
-        self.st.valores["vaga_texto"] = VAGA_PT
-        self.st.cliques = {"btn_analisar"}
-        self.rodar()
-        self.st.cliques = {"btn_gerar"}
+    def clicar(self, *botoes):
+        self.st.cliques = set(botoes)
         self.rodar()
         self.st.cliques = set()
-        self.rodar()
-        self.assertIn("Índice de aderência à vaga", self.textos("markdown"))
-        metricas = {c[1][0]: c[1][1] for c in self.st.chamadas if c[0] == "metric"}
-        self.assertIn("Teto com a sua base atual", metricas)
-        self.assertIn("inventar", self.textos("info"))      # o aviso de que o índice não sobe por inventar
-        self.st.cliques = {"btn_salvar_saida"}
-        self.rodar()
-        pasta = next((self.tmp / "saidas").iterdir())
-        indice = json.loads((pasta / "indice.json").read_text(encoding="utf-8"))
-        self.assertTrue(0 <= indice["depois"] <= 100 and indice["teto"] >= indice["depois"])
-        self.st.cliques = set()
-        self.st.chamadas.clear()
-        self.rodar()
-        self.assertIn("Vagas salvas", self.textos("markdown"))
-        self.assertTrue(any(c[0] == "dataframe" and len(c[1][0]) == 1 for c in self.st.chamadas))
-
-    def test_historico_vazio_orienta_a_salvar(self):
-        self.rodar()
-        self.assertIn("Salvar na pasta de saídas", self.textos("info"))
-
-    def test_chat_e_encerrar_rodada(self):
-        proposta = {"propostas": [{"destino": "habilidades", "meta": {},
-                                   "fatos": [{"texto": "Usa Notion para documentar processos.", "origem": "dito"}]}]}
-        self.usar_llm("Qual foi o resultado?", proposta)
-        self.st.chat = ["Trabalho com marketing"]
-        self.rodar()
-        self.assertEqual([m["role"] for m in self.st.session_state["chat"]], ["user", "assistant"])
-        self.st.cliques = {"btn_encerrar"}
-        self.rodar()
-        self.assertEqual(len(self.st.session_state["rev_entrevista"]), 1)
-        # revisão: marca e salva
-        self.st.cliques = {"Salvar marcados como confirmados"}
-        self.rodar()
-        textos = [f.texto for f in self.kb.fatos("confirmado")]
-        self.assertIn("Usa Notion para documentar processos.", textos)
-        self.assertIsNone(self.st.session_state["rev_entrevista"])
-
-    def test_revisao_nao_marcado_nao_entra(self):
-        proposta = {"propostas": [{"destino": "habilidades", "meta": {}, "fatos": [
-            {"texto": "Fato dito.", "origem": "dito"}, {"texto": "Fato inferido pela IA.", "origem": "sugerido"}]}]}
-        self.usar_llm("ok", proposta)
-        self.st.chat = ["oi"]
-        self.rodar()
-        self.st.cliques = {"btn_encerrar"}
-        self.rodar()
-        self.st.cliques = {"Salvar marcados como confirmados"}
-        self.rodar()
-        textos = [f.texto for f in self.kb.fatos()]
-        self.assertIn("Fato dito.", textos)
-        self.assertNotIn("Fato inferido pela IA.", textos)
-
-    def test_importar_curriculo(self):
-        proposta = {"propostas": [{"destino": "habilidades", "meta": {},
-                                   "fatos": [{"texto": "Domina Excel avançado.", "origem": "dito"}]}]}
-        self.usar_llm(proposta)
-        cv = ("Ana Souza\nAnalista\nana@exemplo.com | +55 11 98888-7777\n" + "Trabalhou com análise de dados e relatórios. " * 5)
-        kb2_dir = self.tmp / "outra"
-        with mock.patch.dict(os.environ, {"CV_BASE_DIR": str(kb2_dir)}):
-            self.st.uploads["up_curriculo"] = stub.ArquivoFalso("cv.txt", cv.encode("utf-8"))
-            self.st.cliques = {"btn_importar"}
-            self.rodar()
-        from src.kb import KB
-        contato = KB(kb2_dir).contato()
-        self.assertEqual(contato["email"], "ana@exemplo.com")
-        self.assertEqual(contato["nome"], "Ana Souza")
-        self.assertEqual(len(self.st.session_state["rev_importacao"]), 1)
-
-    def test_importacao_nao_some_quando_a_conversa_encerra_a_rodada(self):
-        """Bug real: a revisão do CV importado era substituída pela revisão da conversa."""
-        imp = {"propostas": [{"destino": "habilidades", "meta": {},
-                              "fatos": [{"texto": "Domina Excel avançado.", "origem": "dito"}]}]}
-        conv = {"propostas": [{"destino": "habilidades", "meta": {},
-                               "fatos": [{"texto": "Usa Notion para documentar.", "origem": "dito"}]}]}
-        llm = self.usar_llm(imp, "Qual foi o resultado?", conv)
-        cv = "Ana Souza\nAnalista\n" + "Trabalhou com análise de dados e relatórios. " * 5
-        self.st.uploads["up_curriculo"] = stub.ArquivoFalso("cv.txt", cv.encode("utf-8"))
-        self.st.cliques = {"btn_importar"}
-        self.rodar()
-        self.assertEqual(len(self.st.session_state["rev_importacao"]), 1)
-        self.st.cliques = set()
-        self.st.chat = ["Trabalho com marketing"]
-        self.rodar()
-        # o entrevistador soube do que está aguardando revisão e não vai perguntar de novo
-        sistema = llm.chamadas[1]["mensagens"][0]["content"]
-        self.assertIn("aguardando a revisão", sistema)
-        self.assertIn("Domina Excel avançado.", sistema)
-        self.st.cliques = {"btn_encerrar"}
-        self.rodar()
-        self.assertEqual(len(self.st.session_state["rev_importacao"]), 1)    # continua lá
-        self.assertEqual(len(self.st.session_state["rev_entrevista"]), 1)    # e a da conversa é outra
-        self.st.cliques = {"Salvar marcados como confirmados"}
-        self.rodar()
-        textos = [f.texto for f in self.kb.fatos("confirmado")]
-        self.assertIn("Domina Excel avançado.", textos)
-
-    def test_encerrar_bloqueado_enquanto_ha_revisao_da_conversa_pendente(self):
-        proposta = {"propostas": [{"destino": "habilidades", "meta": {},
-                                   "fatos": [{"texto": "Fato novo.", "origem": "dito"}]}]}
-        llm = self.usar_llm("ok", proposta)
-        self.st.chat = ["oi"]
-        self.rodar()
-        self.st.cliques = {"btn_encerrar"}
-        self.rodar()
-        self.st.cliques = {"btn_encerrar"}   # segundo clique: o botão está desabilitado
-        self.rodar()
-        self.assertEqual(len(llm.chamadas), 2)
-
-    def test_descartar_revisao(self):
-        self.usar_llm("ok", {"propostas": [{"destino": "habilidades", "meta": {},
-                                            "fatos": [{"texto": "Fato novo.", "origem": "dito"}]}]})
-        self.st.chat = ["oi"]
-        self.rodar()
-        self.st.cliques = {"btn_encerrar"}
-        self.rodar()
-        self.st.cliques = {"btn_descartar_ent"}
-        self.rodar()
-        self.assertIsNone(self.st.session_state["rev_entrevista"])
-        self.assertNotIn("Fato novo.", [f.texto for f in self.kb.fatos()])
-
-    def test_aba_vaga_avisa_base_incompleta_e_revisao_nao_salva(self):
-        from src.interview import FatoProposto, Proposta
-        self.st.session_state["rev_importacao"] = [Proposta("habilidades", [FatoProposto("Fato.", "dito")])]
-        self.rodar()
-        avisos = self.textos("warning")
-        self.assertIn("aguardando a sua revisão", avisos)
-        self.assertIn("pendente", avisos)     # a base de exemplo tem 2 fatos [sugerido]
 
     def reiniciar(self):
         """Simula fechar e abrir o aplicativo: memória nova, mesma pasta de base."""
         self.st = stub.FakeStreamlit()
         sys.modules["streamlit"] = self.st
-        sys.modules.pop("app", None)
+        _descarregar()
         self.app = importlib.import_module("app")
 
-    def test_conversa_e_revisoes_sobrevivem_a_fechar_o_aplicativo(self):
-        proposta = {"propostas": [{"destino": "habilidades", "meta": {},
-                                   "fatos": [{"texto": "Usa Notion para documentar.", "origem": "dito"}]}]}
-        self.usar_llm("Qual foi o resultado?", proposta)
-        self.st.chat = ["Trabalho com marketing"]
-        self.rodar()
-        self.st.cliques = {"btn_encerrar"}
-        self.rodar()
-        antes = self.st.session_state["chat"]
-        self.assertTrue(self.st.session_state["rev_entrevista"])
-        # fecha e abre de novo
-        self.reiniciar()
-        self.rodar()
-        self.assertEqual(self.st.session_state["chat"], antes)
-        self.assertEqual(self.st.session_state["rev_entrevista"][0].fatos[0].texto, "Usa Notion para documentar.")
-        self.assertEqual(self.st.session_state["msg"][0] if self.st.session_state["msg"] else "info", "info")
-        self.assertIn("Recuperei", " ".join(str(c[1][0]) for c in self.st.chamadas if c[0] == "info"))
-        # e a revisão recuperada ainda pode ser salva
-        self.st.cliques = {"Salvar marcados como confirmados"}
-        self.rodar()
-        self.assertIn("Usa Notion para documentar.", [f.texto for f in self.kb.fatos("confirmado")])
-        # depois de salvar não sobra nada para recuperar
-        self.assertFalse((self.kb.base / ".sessao" / "sessao.json").exists())
+    def gerar_para_a_vaga(self, *extras):
+        """Analisa a vaga de exemplo, avança para o passo 3 e gera. Devolve o LLM falso.
 
-    def test_importacao_nao_salva_sobrevive_a_reiniciar(self):
-        imp = {"propostas": [{"destino": "habilidades", "meta": {},
-                              "fatos": [{"texto": "Domina Excel avançado.", "origem": "dito"}]}]}
-        self.usar_llm(imp)
-        cv = "Ana Souza\nAnalista\n" + "Trabalhou com análise de dados e relatórios. " * 5
-        self.st.uploads["up_curriculo"] = stub.ArquivoFalso("cv.txt", cv.encode("utf-8"))
-        self.st.cliques = {"btn_importar"}
-        self.rodar()
-        self.reiniciar()
-        self.rodar()
-        self.assertEqual(self.st.session_state["rev_importacao"][0].fatos[0].texto, "Domina Excel avançado.")
+        O currículo fictício de teste pontua abaixo da versão sem adaptar, então o app faz a segunda tentativa:
+        por isso a fila tem duas gerações (e dois fiscais).
+        """
+        llm = self.usar_llm(analise_bruta(), gerado_bom(), FISCAL_OK, gerado_bom(), FISCAL_OK, *extras)
+        self.ir("vaga")
+        self.st.valores["vaga_texto"] = VAGA_PT
+        self.clicar("btn_analisar")
+        self.st.valores.pop("vaga_texto")
+        self.clicar("btn_para_gerar")
+        self.clicar("btn_gerar")
+        return llm
 
-    def test_conversa_nova_apaga_so_a_conversa(self):
-        self.usar_llm("ok", {"propostas": [{"destino": "habilidades", "meta": {},
-                                            "fatos": [{"texto": "Fato novo.", "origem": "dito"}]}]})
-        self.st.chat = ["oi"]
-        self.rodar()
-        self.st.cliques = {"btn_encerrar"}
-        self.rodar()
-        self.st.cliques = {"btn_nova_conversa"}
-        self.rodar()
-        self.assertEqual(self.st.session_state["chat"], [])
-        self.assertTrue(self.st.session_state["rev_entrevista"])      # a revisão fica
-        self.reiniciar()
-        self.rodar()
-        self.assertEqual(self.st.session_state["chat"], [])
-        self.assertTrue(self.st.session_state["rev_entrevista"])
+    # ------------------------------------------------------------------ primeiro uso
+    def test_primeiro_uso_mostra_boas_vindas_sem_menu(self):
+        with mock.patch.dict(os.environ, {"CV_BASE_DIR": str(self.tmp / "vazia")}):
+            self.rodar()
+        self.assertIn("Vamos montar o seu currículo", self.textos("markdown"))
+        self.assertNotIn("area", [c[2].get("key") for c in self.st.chamadas if c[2]])
+        self.assertNotIn("area", self.st.session_state.get("_desenhados", []))
 
-    def test_aba_base_mostra_o_registro_quando_ha_chamadas(self):
-        from src import config
+    def test_sem_chave_explica_como_ligar_e_o_historico_continua(self):
+        with mock.patch.dict(os.environ, {"DEEPSEEK_API_KEY": "", "PROVEDOR": "deepseek"}):
+            self.rodar()                       # Meu histórico funciona sem IA
+            self.assertIn("Experiências", self.textos("metric"))
+            self.ir("vaga")
+            self.rodar()
+        self.assertIn("Falta ligar a IA", self.textos("markdown"))
+
+    def test_dados_de_exemplo_no_primeiro_uso(self):
+        nova = self.tmp / "nova"
+        with mock.patch.dict(os.environ, {"CV_BASE_DIR": str(nova)}):
+            self.clicar("btn_exemplo")
+            self.assertTrue((nova / "contato.yaml").exists())
+            self.rodar()
+        self.assertEqual(self.st.session_state["area"], "historico")
+        self.assertIn("Experiências", self.textos("markdown"))
+
+    # ------------------------------------------------------------------ ler o currículo
+    def test_ler_curriculo_no_primeiro_uso_preenche_os_dados_e_abre_a_conferencia(self):
+        self.usar_llm(proposta(("Domina Excel avançado.", "dito")))
+        vazia = self.tmp / "vazia"
+        with mock.patch.dict(os.environ, {"CV_BASE_DIR": str(vazia)}):
+            self.st.uploads["up_inicio"] = stub.ArquivoFalso("cv.txt", CV_PT.encode("utf-8"))
+            self.clicar("btn_up_inicio")
+            contato = KB(vazia).contato()
+            self.assertEqual((contato["email"], contato["nome"]), ("ana@exemplo.com", "Ana Souza"))
+            self.assertEqual(len(self.st.session_state["rev_importacao"]), 1)
+            self.rodar()          # a conferência: dados pessoais já preenchidos, para ela ver e corrigir
+        rev = self.st.session_state["rev_id"]
+        self.assertEqual(self.st.session_state[f"rc_{rev}_email"], "ana@exemplo.com")
+        self.assertIn("Confira o que eu entendi do seu currículo", self.textos("markdown"))
+
+    def test_conferencia_salva_marcados_e_guarda_o_resto_para_confirmar(self):
+        self.usar_llm(proposta(("Domina Excel avançado.", "dito"), ("Lidera reuniões com clientes.", "sugerido")))
+        vazia = self.tmp / "vazia"
+        with mock.patch.dict(os.environ, {"CV_BASE_DIR": str(vazia)}):
+            self.st.uploads["up_inicio"] = stub.ArquivoFalso("cv.txt", CV_PT.encode("utf-8"))
+            self.clicar("btn_up_inicio")
+            rev = self.st.session_state["rev_id"]
+            self.st.valores[f"rc_{rev}_telefone"] = "+55 11 91111-2222"
+            self.clicar("Salvar")
+            kb = KB(vazia)
+            por_status = {f.texto: f.status for f in kb.fatos()}
+            self.assertEqual(kb.contato()["telefone"], "+55 11 91111-2222")
+        self.assertEqual(por_status["Domina Excel avançado."], "confirmado")
+        self.assertEqual(por_status["Lidera reuniões com clientes."], "sugerido")   # guardado, fora dos currículos
+        self.assertIsNone(self.st.session_state["rev_importacao"])
+        self.assertIn("guardada(s) para confirmar depois", self.st.session_state["msg"][1])
+
+    def test_descartar_a_leitura(self):
+        self.usar_llm(proposta(("Fato novo.", "dito")))
+        self.st.uploads["up_dialogo"] = stub.ArquivoFalso("cv.txt", CV_PT.encode("utf-8"))
+        self.clicar("btn_ler_cv", "btn_up_dialogo")
+        self.clicar("btn_descartar_imp")
+        self.assertIsNone(self.st.session_state["rev_importacao"])
+        self.assertNotIn("Fato novo.", [f.texto for f in self.kb.fatos()])
+
+    def test_leitura_pendente_avisa_nas_outras_areas(self):
+        self.st.session_state["rev_importacao"] = [Proposta("habilidades", [FatoProposto("Fato.", "dito")])]
+        self.ir("vaga")
+        self.rodar()
+        self.assertIn("esperando você conferir", self.textos("warning"))
+        self.clicar("btn_ir_revisao")
+        self.rodar()
+        self.assertEqual(self.st.session_state["area"], "historico")
+
+    def test_curriculo_em_outro_idioma_avisa_duplicacao(self):
+        self.usar_llm(proposta(("Uses Excel for reporting.", "dito")))
+        self.st.uploads["up_dialogo"] = stub.ArquivoFalso("cv_en.txt", CV_EN.encode("utf-8"))
+        self.clicar("btn_ler_cv", "btn_up_dialogo")
+        tipo, texto = self.st.session_state["msg"]
+        self.assertEqual(tipo, "warning")
+        self.assertIn("Descartar esta leitura", texto)
+
+    def test_primeira_leitura_em_base_vazia_nao_avisa_idioma(self):
+        self.usar_llm(proposta(("Uses Excel.", "dito")))
+        with mock.patch.dict(os.environ, {"CV_BASE_DIR": str(self.tmp / "vazia")}):
+            self.st.uploads["up_inicio"] = stub.ArquivoFalso("cv_en.txt", CV_EN.encode("utf-8"))
+            self.clicar("btn_up_inicio")
+        self.assertIsNone(self.st.session_state["msg"])
+
+    # ------------------------------------------------------------------ meu histórico
+    def test_cartoes_mostram_os_itens_sem_menu_escondido(self):
+        self.rodar()
+        texto = self.textos("markdown")
+        self.assertIn("Estruturou o funil de aquisição", texto)      # item de uma experiência, à vista
+        self.assertFalse(any(c[0] == "expander" for c in self.st.chamadas))
+
+    def test_confirmar_um_item_no_cartao(self):
+        self.clicar(f"conf_{SLUG_ATUAL}#6")
+        self.assertEqual(self.kb.fato(f"{SLUG_ATUAL}#6").status, "confirmado")
+
+    def test_editar_experiencia_no_cartao(self):
+        self.clicar(f"ed_{SLUG_ESTAG}")
+        self.assertEqual(self.st.session_state["editando"], SLUG_ESTAG)
+        v = self.st.session_state["base_v"]
+        self.st.valores[f"itens_{SLUG_ESTAG}_{v}"] = "Atualizava as redes sociais da loja.\nCriou o calendário de posts."
+        self.clicar("Salvar")
+        textos = [f.texto for f in self.kb.fatos("confirmado") if f.slug == SLUG_ESTAG]
+        self.assertEqual(textos, ["Atualizava as redes sociais da loja.", "Criou o calendário de posts."])
+        self.assertIsNone(self.st.session_state["editando"])
+
+    def test_nova_experiencia_com_data_invalida_mostra_erro(self):
+        self.st.valores.update({"ne_cargo": "Analista", "ne_empresa": "Acme", "ne_inicio": "03/2020", "ne_fim": "atual"})
+        self.clicar("btn_nova_exp", "Adicionar")
+        self.assertIn("AAAA-MM", self.textos("error"))
+
+    def test_nova_experiencia_com_itens(self):
+        self.st.valores.update({"ne_cargo": "Analista", "ne_empresa": "Acme", "ne_inicio": "2015-01",
+                                "ne_fim": "2016-02", "ne_itens": "Fez relatórios.\nAtendeu clientes."})
+        self.clicar("btn_nova_exp", "Adicionar")
+        nova = next(a for a in self.kb.experiencias() if a.meta["empresa"] == "Acme")
+        self.assertEqual([f.texto for f in nova.fatos()], ["Fez relatórios.", "Atendeu clientes."])
+
+    def test_registro_fica_em_avancado(self):
         logs = self.tmp / "saidas" / "logs"
         logs.mkdir(parents=True)
         (logs / "2026-10-12.jsonl").write_text(
-            json.dumps({"quando": "2026-10-12T10:00:00", "rotulo": "gerador", "duracao_s": 3.2, "erro": None},
-                       ensure_ascii=False) + chr(10), encoding="utf-8")
-        with mock.patch.object(config, "saidas_dir", lambda: self.tmp / "saidas"):
-            self.rodar()
+            json.dumps({"quando": "2026-10-12T10:00:00", "rotulo": "gerador", "duracao_s": 3.2, "erro": None}) + chr(10),
+            encoding="utf-8")
+        self.ir("historico", "avancado")
+        self.rodar()
         self.assertIn("gerador", self.textos("write"))
-        nomes = [c[1][0] for c in self.st.chamadas if c[0] == "download_button"]
-        self.assertTrue(any("Baixar o registro" in n for n in nomes))
 
-    def test_painel_de_espaco_por_experiencia_e_ajuste_manual(self):
-        from tests.fakes import SLUG_ESTAG
-        llm = self.usar_llm(analise_bruta(), gerado_bom(), {"problemas": [], "palavras": []})
-        self.st.valores["vaga_texto"] = VAGA_PT
-        self.st.cliques = {"btn_analisar"}
+    # ------------------------------------------------------------------ conversa
+    def test_conversar_e_salvar_o_que_contou(self):
+        self.usar_llm("Qual foi o resultado?", proposta(("Usa Notion para documentar.", "dito"),
+                                                        ("Organiza bem o time.", "sugerido")))
+        self.ir("historico", "conversa")
+        self.st.chat = ["Trabalho com marketing"]
         self.rodar()
-        aid = self.st.session_state["analise_id"]
-        self.st.cliques = set()
-        self.rodar()     # o rerun da análise interrompe a execução; o painel aparece na seguinte
-        # o painel existe e vem preenchido pela regra (a base de exemplo é recente: segue a posição)
-        self.assertEqual(self.st.session_state[f"lim_{aid}_{SLUG_ESTAG}"], 3)
-        self.st.valores[f"lim_{aid}_{SLUG_ESTAG}"] = 0
-        self.st.cliques = {"btn_gerar"}
-        self.rodar()
-        res = self.st.session_state["resultado"]
-        self.assertEqual(res.limites[SLUG_ESTAG]["limite"], 0)
-        self.assertEqual(res.limites[SLUG_ESTAG]["motivo"], "ajustado por você")
-        self.assertIn(f"{SLUG_ESTAG}: 0 (ajustado por você)", llm.chamadas[1]["mensagens"][0]["content"])
-        self.assertIn("**Loja Modelo**", res.curriculo.markdown)
-        self.assertNotIn("Apoiou um evento de lançamento", res.curriculo.markdown)
-        self.st.cliques = set()
-        self.rodar()     # a tela de resultado traz o relatório, com o espaço de cada experiência
-        relatorio_na_tela = self.textos("markdown")
-        self.assertIn("Como cada parte foi escrita", relatorio_na_tela)
-        self.assertIn("0 bullet(s), ajustado por você", relatorio_na_tela)
-        nomes = [c[1][0] for c in self.st.chamadas if c[0] == "download_button"]
-        self.assertIn("Baixar o relatório", nomes)
+        self.assertEqual([m["role"] for m in self.st.session_state["chat"]], ["user", "assistant"])
+        self.clicar("btn_encerrar")
+        self.assertEqual(len(self.st.session_state["rev_entrevista"]), 1)
+        self.clicar("Salvar")
+        por_status = {f.texto: f.status for f in self.kb.fatos()}
+        self.assertEqual(por_status["Usa Notion para documentar."], "confirmado")
+        self.assertEqual(por_status["Organiza bem o time."], "sugerido")
+        self.assertEqual(self.st.session_state["chat"], [])
 
-    def test_aba_base_acoes(self):
-        self.st.valores["ed_arquivo"] = "perfil"
-        self.st.cliques = {"conf_empresa-exemplo-digital-analista-de-marketing#6"}
+    def test_descartar_a_conferencia_da_conversa(self):
+        self.usar_llm("ok", proposta(("Fato novo.", "dito")))
+        self.ir("historico", "conversa")
+        self.st.chat = ["oi"]
         self.rodar()
-        self.assertEqual(self.kb.fato("empresa-exemplo-digital-analista-de-marketing#6").status, "confirmado")
+        self.clicar("btn_encerrar")
+        self.clicar("btn_descartar_ent")
+        self.assertIsNone(self.st.session_state["rev_entrevista"])
+        self.assertNotIn("Fato novo.", [f.texto for f in self.kb.fatos()])
 
-    def test_aba_base_nova_experiencia_invalida_mostra_erro(self):
-        v = self.st.session_state.get("base_v", 0)
+    def test_conversa_e_conferencia_sobrevivem_a_fechar_o_aplicativo(self):
+        self.usar_llm("Qual foi o resultado?", proposta(("Usa Notion para documentar.", "dito")))
+        self.ir("historico", "conversa")
+        self.st.chat = ["Trabalho com marketing"]
         self.rodar()
-        v = self.st.session_state["base_v"]
-        self.st.valores.update({f"ne_emp_{v}": "Acme", f"ne_cargo_{v}": "X", f"ne_ini_{v}": "2020", f"ne_fim_{v}": "atual"})
-        self.st.cliques = {"Criar experiência"}
+        self.clicar("btn_encerrar")
+        antes = self.st.session_state["chat"]
+        self.reiniciar()
         self.rodar()
-        self.assertIn("AAAA-MM", self.textos("error"))
-
-    def test_aba_vaga_traducao_de_cargos(self):
-        # base em português gerando em inglês: pede tradução dos cargos que faltam
-        t = self.kb.ler_texto("loja-modelo-estagiaria-de-marketing").replace("cargo_en: Marketing Intern\n", "")
-        self.kb.salvar_texto("loja-modelo-estagiaria-de-marketing", t)
-        self.usar_llm(analise_bruta(), {"traducoes": [{"slug": "loja-modelo-estagiaria-de-marketing",
-                                                        "cargo": "Marketing Intern", "local": "São Paulo, Brazil"}]})
-        self.st.valores["vaga_texto"] = VAGA_PT
-        self.st.cliques = {"btn_analisar"}
-        self.rodar()
-        aid = self.st.session_state["analise_id"]
-        self.st.valores[f"idioma_{aid}"] = "en"
-        self.st.cliques = {"btn_sugerir_trad"}
-        self.rodar()
-        self.assertIsNotNone(self.st.session_state["trad"])
-        self.st.cliques = {"btn_confirmar_trad"}
-        self.rodar()
-        self.assertIn("cargo_en: Marketing Intern", self.kb.ler_texto("loja-modelo-estagiaria-de-marketing"))
+        self.assertEqual(self.st.session_state["chat"], antes)
+        self.assertIn("Continuei de onde você parou", self.textos("info"))
+        self.ir("historico", "conversa")
+        self.clicar("Salvar")
+        self.assertIn("Usa Notion para documentar.", [f.texto for f in self.kb.fatos("confirmado")])
+        self.assertFalse((self.kb.base / ".sessao" / "sessao.json").exists())
 
     def test_erro_do_provedor_vira_mensagem_e_nao_derruba(self):
         from src.llm import ErroLLM
@@ -388,50 +297,216 @@ class TestApp(unittest.TestCase):
             def conversar(self, *a, **k):
                 raise ErroLLM("Limite de uso do provedor atingido.")
 
-        p = mock.patch.object(self.app, "obter_llm", lambda kb: Quebra())
+        p = mock.patch.object(sys.modules["interface.comum"], "obter_llm", lambda kb: Quebra())
         p.start()
         self.addCleanup(p.stop)
+        self.ir("historico", "conversa")
         self.st.chat = ["oi"]
         self.rodar()
         self.assertIn("Limite de uso", self.textos("error"))
         self.assertEqual(self.st.session_state["chat"], [])
 
-    CV_EN = ("Mariana Example\nMarketing Analyst\n" + "Worked with the team on paid media campaigns and reporting for the company. " * 4)
-
-    def test_aviso_fixo_na_area_de_importacao(self):
+    # ------------------------------------------------------------------ currículo para uma vaga
+    def test_passos_da_vaga(self):
+        self.usar_llm(analise_bruta())
+        self.ir("vaga")
+        self.st.valores["vaga_texto"] = VAGA_PT
+        self.clicar("btn_analisar")
+        self.assertEqual(self.st.session_state["passo_vaga"], 2)
         self.rodar()
-        legendas = " ".join(str(c[1][0]) for c in self.st.chamadas if c[0] == "caption")
-        self.assertIn("um** idioma só", legendas)
+        self.assertIn("requisitos obrigatórios", self.textos("markdown"))
+        self.assertIn("Comprovado", self.textos("markdown"))
+        self.clicar("btn_para_gerar")
+        self.assertEqual(self.st.session_state["passo_vaga"], 3)
+        self.clicar("btn_voltar_2")          # voltar ao encaixe
+        self.assertEqual(self.st.session_state["passo_vaga"], 2)
+        self.clicar("btn_voltar_1")          # trocar de vaga volta ao passo 1 e limpa a análise
+        self.assertIsNone(self.st.session_state["analise"])
 
-    def test_cv_em_outro_idioma_que_a_base_gera_aviso_de_duplicacao(self):
-        self.usar_llm({"propostas": [{"destino": "habilidades", "meta": {},
-                                      "fatos": [{"texto": "Uses Excel for reporting.", "origem": "dito"}]}]})
-        self.st.uploads["up_curriculo"] = stub.ArquivoFalso("cv_en.txt", self.CV_EN.encode("utf-8"))
-        self.st.cliques = {"btn_importar"}
+    def test_gerar_salva_sozinho_na_pasta_da_empresa_e_mostra_aderencia(self):
+        llm = self.gerar_para_a_vaga()
+        self.assertEqual(len(llm.chamadas), 5)       # análise, geração, fiscal e a segunda tentativa
+        pasta = self.tmp / "saidas" / f"Empresa Fictícia_{date.today():%Y-%m}"
+        self.assertTrue(pasta.is_dir())
+        for nome in ("Curriculo_Mariana_Exemplo.pdf", "Curriculo_Mariana_Exemplo.docx", "Curriculo_Mariana_Exemplo.md",
+                     "vaga.txt", "analise.json", "relatorio.md", "indice.json"):
+            self.assertTrue((pasta / nome).exists(), nome)
         self.rodar()
-        tipo, texto = self.st.session_state["msg"]
-        self.assertEqual(tipo, "warning")
-        self.assertIn("descarte esta revisão", texto)
-        self.assertIn("português", texto)
-        self.assertIn("inglês", texto)
+        self.assertIn("Aderência à vaga", self.textos("metric"))
+        self.assertTrue(self.chamou("altair_chart"))
+        nomes = [c[1][0] for c in self.st.chamadas if c[0] == "download_button"]
+        self.assertIn("Baixar PDF", nomes)
+        self.assertIn("Baixar Word", nomes)
 
-    def test_cv_no_mesmo_idioma_da_base_so_informa(self):
-        cv_pt = ("Ana Souza\nAnalista\n" + "Trabalhou com a equipe em campanhas de mídia paga e relatórios para a empresa. " * 4)
-        self.usar_llm({"propostas": [{"destino": "habilidades", "meta": {},
-                                      "fatos": [{"texto": "Domina Excel.", "origem": "dito"}]}]})
-        self.st.uploads["up_curriculo"] = stub.ArquivoFalso("cv_pt.txt", cv_pt.encode("utf-8"))
-        self.st.cliques = {"btn_importar"}
+    def test_gerar_de_novo_regrava_a_mesma_pasta(self):
+        self.gerar_para_a_vaga(gerado_bom(), FISCAL_OK, gerado_bom(), FISCAL_OK)
+        self.clicar("btn_gerar_de_novo")
+        self.clicar("btn_gerar")
+        self.assertEqual(len([p for p in (self.tmp / "saidas").iterdir() if p.is_dir()]), 1)
+
+    def test_editar_o_texto_e_salvar_a_versao(self):
+        self.gerar_para_a_vaga()
+        gid = self.st.session_state["gen_id"]
+        editado = self.st.session_state[f"texto_{gid}"].replace("Mariana Exemplo", "Mariana E. Exemplo")
+        self.st.valores[f"editar_{gid}"] = True
+        self.st.valores[f"editor_{gid}_0"] = editado
         self.rodar()
-        self.assertEqual(self.st.session_state["msg"][0], "info")
+        self.clicar("btn_salvar_edicao")
+        pasta = next((self.tmp / "saidas").iterdir())
+        self.assertIn("Mariana E. Exemplo", (pasta / "Curriculo_Mariana_Exemplo.md").read_text(encoding="utf-8"))
 
-    def test_primeira_importacao_em_base_vazia_nao_avisa(self):
-        self.usar_llm({"propostas": [{"destino": "habilidades", "meta": {},
-                                      "fatos": [{"texto": "Uses Excel.", "origem": "dito"}]}]})
-        with mock.patch.dict(os.environ, {"CV_BASE_DIR": str(self.tmp / "vazia")}):
-            self.st.uploads["up_curriculo"] = stub.ArquivoFalso("cv_en.txt", self.CV_EN.encode("utf-8"))
-            self.st.cliques = {"btn_importar"}
+    def test_pontuacao_de_hoje_aparece_antes_de_gerar(self):
+        self.usar_llm(analise_bruta())
+        self.ir("vaga")
+        self.st.valores["vaga_texto"] = VAGA_PT
+        self.clicar("btn_analisar")
+        self.rodar()
+        metricas = self.textos("metric")
+        self.assertIn("Seu currículo hoje, para esta vaga", metricas)
+        self.assertIn("Máximo com o seu histórico", metricas)
+
+    def test_versao_abaixo_da_original_oferece_a_sem_adaptar(self):
+        from tests.test_redesenho import TestNaoPiorar
+        magro = TestNaoPiorar.magro
+        self.usar_llm(analise_bruta(), magro(), FISCAL_OK, magro(), FISCAL_OK)
+        self.ir("vaga")
+        self.st.valores["vaga_texto"] = VAGA_PT
+        self.clicar("btn_analisar")
+        self.st.valores.pop("vaga_texto")
+        self.clicar("btn_para_gerar")
+        self.clicar("btn_gerar")
+        self.rodar()
+        self.assertIn("ficou abaixo do seu currículo sem adaptar", self.textos("warning"))
+        self.clicar("btn_usar_original")
+        gid = self.st.session_state["gen_id"]
+        res = self.st.session_state["resultado"]
+        self.assertEqual(self.st.session_state[f"texto_{gid}"], res.aderencia["markdown_antes"])
+        self.st.chamadas.clear()
+        self.rodar()
+        self.assertIn("versão sem adaptar", self.textos("info"))
+        self.clicar("btn_salvar_edicao")           # e dá para guardar essa versão em Minhas vagas
+        pasta = next((self.tmp / "saidas").iterdir())
+        self.assertEqual((pasta / "Curriculo_Mariana_Exemplo.md").read_text(encoding="utf-8"), res.aderencia["markdown_antes"])
+
+    def test_vistas_do_resultado(self):
+        self.gerar_para_a_vaga()
+        self.rodar()         # primeira tela depois de gerar: abre na vista do currículo
+        for vista, esperado in (("mudou", "Como cada parte foi escrita"), ("melhorar", "Palavras-chave da vaga neste currículo")):
+            self.st.session_state["vista_resultado"] = vista
+            self.st.chamadas.clear()
             self.rodar()
-        self.assertEqual(self.st.session_state["msg"][0], "info")
+            self.assertIn(esperado, self.textos("markdown"))
+        self.st.session_state["vista_resultado"] = "melhorar"
+        self.rodar()
+        self.assertIn("inventar", self.textos("info"))
+
+    def test_lacunas_respondidas_vao_para_conferencia_e_atualizam_o_encaixe(self):
+        resposta = proposta(("Criou dashboards no Looker Studio para a diretoria.", "dito"), destino=SLUG_ATUAL)
+        llm = self.usar_llm(analise_bruta(), resposta, analise_bruta())
+        self.ir("vaga")
+        self.st.valores["vaga_texto"] = VAGA_PT
+        self.clicar("btn_analisar")
+        aid = self.st.session_state["analise_id"]
+        self.st.valores[f"lac_{aid}_0"] = "Criei dashboards no Looker Studio para a diretoria."
+        self.rodar()
+        self.clicar("btn_lacunas")
+        self.assertTrue(self.st.session_state["rev_lacuna"])
+        self.clicar("Salvar")
+        self.assertIn("Criou dashboards no Looker Studio para a diretoria.", [f.texto for f in self.kb.fatos("confirmado")])
+        self.assertEqual(self.st.session_state["analise_id"], aid + 1)      # reanalisou sozinho
+        self.assertEqual(len(llm.chamadas), 3)
+
+    def test_espaco_por_experiencia_e_ajuste_manual(self):
+        llm = self.usar_llm(analise_bruta(), gerado_bom(), FISCAL_OK, gerado_bom(), FISCAL_OK)
+        self.ir("vaga")
+        self.st.valores["vaga_texto"] = VAGA_PT
+        self.clicar("btn_analisar")
+        aid = self.st.session_state["analise_id"]
+        self.clicar("btn_para_gerar")
+        self.rodar()
+        self.assertEqual(self.st.session_state[f"lim_{aid}_{SLUG_ESTAG}"], 3)
+        self.st.valores[f"lim_{aid}_{SLUG_ESTAG}"] = 0
+        self.clicar("btn_gerar")
+        res = self.st.session_state["resultado"]
+        self.assertEqual(res.limites[SLUG_ESTAG]["motivo"], "ajustado por você")
+        self.assertIn(f"{SLUG_ESTAG}: 0 (ajustado por você)", llm.chamadas[1]["mensagens"][0]["content"])
+        self.assertNotIn("Apoiou um evento de lançamento", res.curriculo.markdown)
+
+    def test_traducao_de_cargos(self):
+        t = self.kb.ler_texto("loja-modelo-estagiaria-de-marketing").replace("cargo_en: Marketing Intern\n", "")
+        self.kb.salvar_texto("loja-modelo-estagiaria-de-marketing", t)
+        self.usar_llm(analise_bruta(), {"traducoes": [{"slug": "loja-modelo-estagiaria-de-marketing",
+                                                        "cargo": "Marketing Intern", "local": "São Paulo, Brazil"}]})
+        self.ir("vaga")
+        self.st.valores["vaga_texto"] = VAGA_PT
+        self.clicar("btn_analisar")
+        aid = self.st.session_state["analise_id"]
+        self.clicar("btn_para_gerar")
+        self.st.valores[f"idioma_{aid}"] = "en"
+        self.clicar("btn_sugerir_trad")
+        self.assertIsNotNone(self.st.session_state["trad"])
+        self.clicar("btn_confirmar_trad")
+        self.assertIn("cargo_en: Marketing Intern", self.kb.ler_texto("loja-modelo-estagiaria-de-marketing"))
+
+    def test_vaga_que_nao_combina_avisa_que_o_curriculo_vai_sair_fraco(self):
+        bruta = analise_bruta()
+        for r in bruta["requisitos"]:
+            r.update(status="lacuna", evidencias=[])
+        bruta["observacoes"] = "A base não tem experiência na área da vaga."
+        self.usar_llm(bruta)
+        self.ir("vaga")
+        self.st.valores["vaga_texto"] = VAGA_PT
+        self.clicar("btn_analisar")
+        self.rodar()
+        self.assertIn("vai sair fraco", self.textos("warning"))
+        self.assertIn("A base não tem experiência na área da vaga.", self.textos("info"))
+
+    def test_falta_de_dados_pessoais_aparece_antes_de_gerar_e_no_historico(self):
+        self.kb.salvar_contato({})
+        self.rodar()
+        self.assertIn("Faltam seus dados pessoais", self.textos("warning"))
+        self.clicar("btn_ir_dados")
+        self.rodar()
+        self.assertEqual(self.st.session_state["vista_historico"], "dados")
+        self.usar_llm(analise_bruta())
+        self.ir("vaga")
+        self.st.valores["vaga_texto"] = VAGA_PT
+        self.clicar("btn_analisar")
+        self.clicar("btn_para_gerar")
+        self.rodar()
+        self.assertIn("Faltam seu nome ou seu contato", self.textos("warning"))
+
+    def test_recomecar_a_conversa_pede_confirmacao(self):
+        self.usar_llm("Qual foi o resultado?")
+        self.ir("historico", "conversa")
+        self.st.chat = ["oi"]
+        self.rodar()
+        self.assertTrue(self.st.session_state["chat"])
+        self.clicar("btn_nova_conversa")      # o botão só existe dentro da confirmação
+        self.assertEqual(self.st.session_state["chat"], [])
+
+    def test_vaga_sem_historico_confirmado_orienta(self):
+        with mock.patch.dict(os.environ, {"CV_BASE_DIR": str(self.tmp / "so-contato")}):
+            KB(self.tmp / "so-contato").salvar_contato({"nome": "Ana"})
+            self.ir("vaga")
+            self.rodar()
+        self.assertIn("monte o seu histórico", self.textos("info"))
+
+    # ------------------------------------------------------------------ minhas vagas
+    def test_minhas_vagas_vazia_orienta(self):
+        self.ir("vagas")
+        self.rodar()
+        self.assertIn("Nenhuma vaga ainda", self.textos("markdown"))
+
+    def test_minhas_vagas_lista_com_grafico_e_downloads(self):
+        self.gerar_para_a_vaga()
+        self.ir("vagas")
+        self.st.chamadas.clear()
+        self.rodar()
+        self.assertTrue(self.chamou("altair_chart"))
+        self.assertIn("Empresa Fictícia", self.textos("markdown"))
+        nomes = [c[1][0] for c in self.st.chamadas if c[0] == "download_button"]
+        self.assertEqual(nomes[:2], ["PDF", "Word"])
 
 
 if __name__ == "__main__":

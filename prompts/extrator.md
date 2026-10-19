@@ -11,7 +11,7 @@ Devolva somente um JSON, sem texto antes ou depois, neste formato:
 ```json
 {"propostas": [
   {"destino": "perfil | habilidades | formacao | certificacoes | idiomas | <slug de experiência existente> | nova_experiencia",
-   "meta": {"empresa": "", "cargo": "", "inicio": "AAAA-MM", "fim": "AAAA-MM ou atual", "local": "", "cargo_en": "", "local_en": ""},
+   "meta": {"empresa": "", "cargo": "", "inicio": "AAAA-MM ou AAAA", "fim": "AAAA-MM, AAAA ou atual", "local": "", "cargo_en": "", "local_en": ""},
    "fatos": [{"texto": "", "origem": "dito | sugerido"}]}
 ]}
 ```
@@ -28,7 +28,7 @@ Devolva somente um JSON, sem texto antes ou depois, neste formato:
 - `idiomas`: `Inglês: Fluente` (idioma, dois pontos, nível).
 - Um slug da lista "Experiências existentes": fatos de um cargo que já está na base.
 - `nova_experiencia`: um cargo que ainda não existe na lista. Preencha `meta` completo. Datas no formato
-  AAAA-MM. Se a pessoa não disse o mês, deixe a data em branco em vez de chutar (a tela de revisão pede).
+  AAAA-MM. Se a pessoa (ou o currículo) só diz o ano, escreva só o ano (AAAA): nunca chute o mês.
   `cargo_en` e `local_en` só se a pessoa os informou; não traduza por conta própria.
 
 # Como escrever cada fato

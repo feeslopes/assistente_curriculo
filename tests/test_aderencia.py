@@ -93,7 +93,7 @@ class TestAderencia(unittest.TestCase):
         sem_contato = aderencia.calcular(self.analise, md, res.curriculo.rastro, self.kb, self.cfg, "pt")
         c2 = {c["nome"]: c for c in sem_contato["componentes"]["estrutura"]["detalhe"]["checks"]}
         self.assertFalse(c2["Contato no cabeçalho"]["ok"])
-        self.assertIn("Minha base", c2["Contato no cabeçalho"]["dica"])
+        self.assertIn("Dados pessoais", c2["Contato no cabeçalho"]["dica"])
 
     def test_sem_desejaveis_os_pesos_se_reescalam(self):
         self.analise["requisitos"] = [r for r in self.analise["requisitos"] if r["tipo"] == "obrigatorio"]

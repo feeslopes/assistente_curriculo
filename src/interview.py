@@ -4,13 +4,15 @@ Regra central: nada vira [confirmado] sem uma ação explícita da pessoa. O ext
 """
 from __future__ import annotations
 
+import difflib
 import re
 from dataclasses import dataclass, field
+from datetime import date
 
 from . import config
 from .kb import ARQUIVOS_FATOS, KB, ErroBase, validar_meta_experiencia
 from .llm import completar_json
-from .texto import contem_contato, detectar_idioma, mascarar_contato, mes_citado, normalizar
+from .texto import contem_contato, detectar_idioma, idioma_de_frase, mascarar_contato, mes_citado, normalizar
 
 ABERTURA = (
     "Oi! Vou te fazer perguntas, uma de cada vez, para entender com precisão o que você já fez "
@@ -58,11 +60,12 @@ def abertura(kb: KB) -> str:
         return ABERTURA
     exps = kb.experiencias()
     lacunas = kb.lacunas()
-    texto = (f"Oi! A sua base já tem {len(exps)} experiência(s) e {len(kb.fatos('confirmado'))} fato(s) "
-             "confirmado(s), então não vou repetir o que já está nela. ")
+    n_exp, n_info = len(exps), len(kb.fatos("confirmado"))
+    texto = (f"Oi! O seu histórico já tem {n_exp} {'experiência' if n_exp == 1 else 'experiências'} e "
+             f"{n_info} {'informação' if n_info == 1 else 'informações'}, então não vou repetir o que já está lá. ")
     if not lacunas:
-        return texto + ("A base parece completa. Se quiser, escolha uma experiência para aprofundar, ou vá para a aba "
-                        "2 e use uma vaga.")
+        return texto + ("Ele parece completo. Se quiser, escolha uma experiência para aprofundar, ou vá para "
+                        "Currículo para uma vaga.")
     texto += "O que ainda falta: " + "; ".join(l["rotulo"] for l in lacunas[:3]) + ".\n\nPara começar: "
     p = lacunas[0]
     if p["tipo"] in ("poucos_fatos", "sem_numeros"):
@@ -158,14 +161,18 @@ def validar_propostas(bruto, kb: KB, idioma_material: str | None = None,
             except ErroBase as e:
                 if not avisos_data:   # o aviso de data já explica; não repetir
                     problemas.append(f"Complete os dados da experiência antes de salvar. {e}")
-            # Mesma empresa e mesmo início de uma experiência que já existe: quase certamente é o mesmo cargo,
-            # por exemplo de um currículo em outro idioma. O código avisa; não depende do modelo perceber.
+            # Parece uma experiência que já existe (mesma empresa escrita de outro jeito, ou o mesmo período)? Quase
+            # sempre é o mesmo cargo vindo de outro currículo ou de outro idioma. O código avisa; não depende do modelo.
             for a in kb.experiencias(True):
-                if (normalizar(a.meta["empresa"]) == normalizar(str(meta.get("empresa", "")))
-                        and a.meta["inicio"] == str(meta.get("inicio", ""))):
-                    problemas.append(f"Já existe uma experiência na mesma empresa com o mesmo início ({a.meta['cargo']}, "
-                                     f"{a.meta['empresa']}). Provavelmente é a mesma, talvez de um currículo em outro "
-                                     "idioma. Descarte esta revisão para não duplicar.")
+                motivo = parecida_com(a.meta, meta)
+                if motivo == "mesmo período":
+                    problemas.append(f"Acontece no mesmo período de {a.meta['cargo']} na {a.meta['empresa']}, que você já "
+                                     "tem. Se for a mesma experiência com outro nome, desmarque os itens daqui. Se foram "
+                                     "dois trabalhos ao mesmo tempo, pode salvar.")
+                    break
+                if motivo:
+                    problemas.append(f"Parece a experiência que você já tem: {a.meta['cargo']} na {a.meta['empresa']} "
+                                     f"({motivo}). Se for a mesma, desmarque os itens daqui para não duplicar.")
                     break
         elif destino in ARQUIVOS_FATOS or destino in slugs:
             meta = {}
@@ -185,14 +192,77 @@ def validar_propostas(bruto, kb: KB, idioma_material: str | None = None,
             origem = (f.get("origem") if isinstance(f, dict) else "") or ""
             # Conservador: só "dito" vem marcado. Qualquer outra coisa é inferência.
             fatos.append(FatoProposto(texto, "dito" if str(origem).lower() == "dito" else "sugerido"))
-        if fatos and idioma_material:
-            achado = detectar_idioma(" ".join(f.texto for f in fatos), min_palavras=12)
-            if achado and achado != idioma_material:
-                problemas.append(f"Estes fatos parecem estar em {NOMES_IDIOMA[achado]}, mas o material está em "
-                                 f"{NOMES_IDIOMA[idioma_material]}. A IA pode ter traduzido: confira o texto.")
+        juntos = " ".join(f.texto for f in fatos)
+        achado = detectar_idioma(juntos, min_palavras=12) if fatos else None
+        # frases curtas de currículo quase não têm "de" e "the": para elas, a detecção que olha acentos e terminações
+        curto = idioma_de_frase(juntos) if fatos else None
+        if achado and idioma_material and achado != idioma_material:
+            problemas.append(f"Estes itens parecem estar em {NOMES_IDIOMA[achado]}, mas o material está em "
+                             f"{NOMES_IDIOMA[idioma_material]}. A IA pode ter traduzido: confira o texto.")
+        elif curto and destino in slugs and existentes.get(destino) and curto != kb.idioma_base():
+            # itens novos numa experiência que já existe, em outro idioma: costumam ser os mesmos itens traduzidos
+            problemas.append(f"Estes itens estão em {NOMES_IDIOMA[curto]} e o seu histórico em "
+                             f"{NOMES_IDIOMA[kb.idioma_base()]}. Se forem os mesmos que você já tem, só traduzidos, "
+                             "desmarque para não duplicar.")
         if fatos:
             propostas.append(Proposta(destino, fatos, meta, problemas))
     return propostas
+
+
+_SUFIXOS_EMPRESA = {"sa", "s", "a", "ltda", "ltd", "inc", "llc", "corp", "corporation", "company", "co", "grupo",
+                    "group", "me", "eireli", "holding", "brasil", "brazil", "do", "da", "de"}
+
+
+def _nucleo_empresa(nome: str) -> str:
+    """Nome da empresa sem pontuação, sufixos societários e espaços: "Itaú Unibanco S.A." vira "itauunibanco"."""
+    partes = [p for p in re.findall(r"[a-z0-9]+", normalizar(nome)) if p not in _SUFIXOS_EMPRESA]
+    return "".join(partes)
+
+
+def _meses(aaaa_mm: str) -> int | None:
+    m = re.match(r"^(\d{4})(?:-(\d{2}))?", str(aaaa_mm or ""))
+    return int(m.group(1)) * 12 + (int(m.group(2) or 6) - 1) if m else None
+
+
+def parecida_com(existente: dict, nova: dict) -> str:
+    """Motivo, em português, de a experiência nova parecer uma que já existe. Vazio se não parece.
+
+    Empresa: mesmo nome sem sufixos e espaços, ou um contido no outro ("Itaú" e "Itaú Unibanco S.A."); nomes só
+    parecidos ("Mercado Livre" e "MercadoLibre") contam como indício mais fraco. Período: começos com até 3 meses de
+    diferença (ou no mesmo ano, quando um dos lados não tem mês) e a maior parte de um dentro do outro.
+    Sempre exige o período coincidir (ou não haver data para comparar): a mesma empresa em outra época é outro cargo,
+    e apelidos ("Magalu" e "Magazine Luiza") só o período pega.
+    """
+    a, b = _nucleo_empresa(existente.get("empresa", "")), _nucleo_empresa(nova.get("empresa", ""))
+    forte = bool(a and b and (a == b or (min(len(a), len(b)) >= 4 and (a in b or b in a))))
+    fraca = bool(a and b and difflib.SequenceMatcher(None, a, b).ratio() >= 0.8)
+    ini_a, ini_b = str(existente.get("inicio") or ""), str(nova.get("inicio") or "")
+    m_a, m_b = _meses(ini_a), _meses(ini_b)
+    hoje = date.today().year * 12 + date.today().month - 1
+
+    def fim(meta):
+        f = str(meta.get("fim") or "").lower()
+        return hoje if f in ("atual", "presente", "present", "current") else _meses(f)
+    f_a, f_b = fim(existente), fim(nova)
+    if m_a is None or m_b is None:
+        comeca_junto = None                     # não há como comparar
+    elif len(ini_a) == 4 or len(ini_b) == 4:     # só o ano de um dos lados
+        comeca_junto = ini_a[:4] == ini_b[:4]
+    else:
+        comeca_junto = abs(m_a - m_b) <= 3
+    sobrepoe = None
+    if None not in (m_a, m_b, f_a, f_b):
+        comum = min(f_a, f_b) - max(m_a, m_b)
+        sobrepoe = comum / max(1, min(f_a - m_a, f_b - m_b)) >= 0.6
+    periodo = bool(comeca_junto) and sobrepoe is not False
+    sem_data = comeca_junto is None
+    if forte and (periodo or sem_data):
+        return "mesma empresa, no mesmo período" if periodo else "mesma empresa"
+    if fraca and periodo:
+        return "empresa com nome parecido, no mesmo período"
+    if periodo and sobrepoe:
+        return "mesmo período"
+    return ""
 
 
 def _conferir_datas(meta: dict, material: str | None) -> tuple[dict, list[str]]:
@@ -203,8 +273,9 @@ def _conferir_datas(meta: dict, material: str | None) -> tuple[dict, list[str]]:
     for campo, rotulo in (("inicio", "início"), ("fim", "fim")):
         v = str(meta.get(campo, "") or "").strip()
         if re.match(r"^\d{4}-\d{2}$", v) and not mes_citado(material, v):
-            meta[campo] = ""
-            avisos.append(f"O mês de {rotulo} ({v}) não aparece no que foi dito, só o ano. Informe a data correta.")
+            meta[campo] = v[:4]
+            avisos.append(f"O mês de {rotulo} não aparece no que foi dito, só o ano. Deixei só {v[:4]}; se você "
+                          "lembrar o mês, corrija (AAAA-MM).")
     return meta, avisos
 
 
@@ -224,6 +295,16 @@ def aplicar(kb: KB, propostas: list[Proposta], marcados: set[tuple[int, int]], g
     Propostas de nova_experiencia com meta incompleta levantam ErroBase.
     """
     total = {"confirmados": 0, "pendentes": 0, "ignorados": 0, "experiencias_criadas": 0}
+    erros = []
+    for p in propostas:
+        if p.destino == "nova_experiencia" and p.fatos:
+            try:
+                validar_meta_experiencia(p.meta)
+            except ErroBase as e:
+                nome = " na ".join(x for x in (p.meta.get("cargo"), p.meta.get("empresa")) if x) or "uma experiência nova"
+                erros.append(f"{nome}: {e}")
+    if erros:
+        raise ErroBase("Nada foi salvo ainda. Corrija antes: " + " ".join(erros))
     for i, p in enumerate(propostas):
         sim = [f.texto for j, f in enumerate(p.fatos) if (i, j) in marcados]
         nao = [f.texto for j, f in enumerate(p.fatos) if (i, j) not in marcados] if guardar_resto else []

@@ -138,15 +138,27 @@ class TestDatasInventadas(unittest.TestCase):
 
     def test_mes_que_a_ia_completou_e_apagado(self):
         props = interview.validar_propostas(self.bruto(), self.kb, "pt", "Sou analista na Empresa Teste desde 2022.")
-        self.assertEqual(props[0].meta["inicio"], "")
+        self.assertEqual(props[0].meta["inicio"], "2022")      # fica só o ano: nada de mês inventado
         self.assertTrue(any("só o ano" in p for p in props[0].problemas))
-        with self.assertRaises(ErroBase):
-            interview.aplicar(self.kb, props, {(0, 0)}, False)   # sem data não cria experiência
+        r = interview.aplicar(self.kb, props, {(0, 0)}, False)
+        self.assertEqual(r["experiencias_criadas"], 1)
+
+    def test_salvar_e_tudo_ou_nada(self):
+        """Uma experiência com data inválida não pode deixar o resto salvo pela metade."""
+        bruto = {"propostas": [
+            {"destino": "habilidades", "meta": {}, "fatos": [{"texto": "Usa Power BI.", "origem": "dito"}]},
+            {"destino": "nova_experiencia", "meta": {"empresa": "X", "cargo": "Y", "inicio": "", "fim": "atual"},
+             "fatos": [{"texto": "Fez algo.", "origem": "dito"}]}]}
+        props = interview.validar_propostas(bruto, self.kb)
+        with self.assertRaises(ErroBase) as ctx:
+            interview.aplicar(self.kb, props, {(0, 0), (1, 0)}, True)
+        self.assertIn("Nada foi salvo", str(ctx.exception))
+        self.assertNotIn("Usa Power BI.", [f.texto for f in self.kb.fatos()])
 
     def test_mes_dito_e_mantido(self):
         props = interview.validar_propostas(self.bruto(), self.kb, "pt", "Entrei na Empresa Teste em janeiro de 2022.")
         self.assertEqual(props[0].meta["inicio"], "2022-01")
-        self.assertEqual(props[0].problemas, [])
+        self.assertFalse(any("ano" in p or "mês" in p for p in props[0].problemas))
 
 
 class TestAberturaDinamica(unittest.TestCase):
@@ -163,7 +175,8 @@ class TestAberturaDinamica(unittest.TestCase):
     def test_base_preenchida_nao_repete_o_basico(self):
         t = interview.abertura(self.kb)
         self.assertIn("não vou repetir", t)
-        self.assertIn("experiência(s)", t)
+        self.assertIn("3 experiências", t)
+        self.assertNotIn("fato", t)          # sem jargão interno
         self.assertNotIn("qual é o seu trabalho atual", t)
         self.assertNotIn("—", t)
 
@@ -192,17 +205,26 @@ class TestExperienciaDuplicada(unittest.TestCase):
 
     def test_mesma_empresa_e_inicio_em_outro_idioma_gera_aviso(self):
         props = interview.validar_propostas(self.bruto(), self.kb)
-        self.assertTrue(any("Já existe uma experiência" in p for p in props[0].problemas))
+        self.assertTrue(any("Parece a experiência que você já tem" in p for p in props[0].problemas))
         self.assertTrue(any("Analista de Marketing" in p for p in props[0].problemas))
 
     def test_empresa_com_caixa_e_acento_diferentes_tambem_casa(self):
-        props = interview.validar_propostas(self.bruto(empresa="EMPRESA EXEMPLO DIGITAL"), self.kb)
-        self.assertTrue(any("Já existe" in p for p in props[0].problemas))
+        props = interview.validar_propostas(self.bruto(empresa="EMPRESA EXEMPLO DIGITAL S.A."), self.kb)
+        self.assertTrue(any("mesma empresa" in p for p in props[0].problemas))
+
+    def test_nome_parecido_e_inicio_um_pouco_diferente_tambem_avisa(self):
+        props = interview.validar_propostas(self.bruto(empresa="ExemploDigital", inicio="2022-01"), self.kb)
+        self.assertTrue(any("Parece a experiência" in p for p in props[0].problemas))
+
+    def test_empresa_nova_em_outro_periodo_nao_avisa(self):
+        props = interview.validar_propostas(self.bruto(empresa="Outra Empresa", inicio="2012-01", fim="2013-01"), self.kb)
+        self.assertEqual(props[0].problemas, [])
 
     def test_mesma_empresa_com_outro_inicio_nao_avisa(self):
         props = interview.validar_propostas(self.bruto(inicio="2015-01", fim="2016-01"), self.kb)
         self.assertEqual(props[0].problemas, [])
 
-    def test_empresa_nova_nao_avisa(self):
+    def test_empresa_nova_no_mesmo_periodo_avisa_de_leve(self):
+        """Pode ser a mesma com outro nome (apelido, outro idioma) ou dois trabalhos ao mesmo tempo: só pergunta."""
         props = interview.validar_propostas(self.bruto(empresa="Outra Empresa"), self.kb)
-        self.assertEqual(props[0].problemas, [])
+        self.assertTrue(any("Se foram dois trabalhos ao mesmo tempo, pode salvar" in p for p in props[0].problemas))

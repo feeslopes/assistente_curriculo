@@ -8,8 +8,8 @@ from datetime import date
 from . import aderencia, config, interview, relatorio, render
 from .kb import KB, ErroBase
 from .llm import ErroLLM, completar_json
-from .texto import detectar_idioma
-from .verify import cobertura_palavras, percentual
+from .texto import detectar_idioma, normalizar
+from .verify import cobertura_palavras, palavras_da_base, percentual, termo_suportado
 
 STATUS = ("coberto", "parcial", "lacuna")
 NOMES_IDIOMA = {"pt": "Português do Brasil", "en": "English (inglês)"}
@@ -24,6 +24,11 @@ class Resultado:
     limites: dict = field(default_factory=dict)   # slug -> {limite, motivo}
     relatorio: dict = field(default_factory=dict)  # ver relatorio.montar
     aderencia: dict = field(default_factory=dict)  # ver aderencia.comparar (antes, depois, melhorias)
+    trechos_suspeitos: list[str] = field(default_factory=list)  # frases que o fiscal apontou: não contam no índice
+    termos_rejeitados: list[str] = field(default_factory=list)  # palavras-chave que a análise deu como comprovadas
+                                                                # e o fiscal não confirmou
+    segunda_tentativa: bool = False    # a primeira versão pontuou abaixo da original e foi refeita
+    abaixo_do_original: bool = False   # mesmo assim ficou abaixo: a tela oferece a versão sem adaptar
 
 
 # ------------------------------------------------------------------------ análise
@@ -123,7 +128,8 @@ def recomendar_idioma(vaga: str, analise: dict | None, cfg: dict) -> str:
 def _anos_desde(fim: str, hoje: date) -> float:
     if fim == "atual":
         return 0.0
-    ano, mes = (int(x) for x in fim.split("-"))
+    ano = int(fim[:4])
+    mes = int(fim[5:7]) if len(fim) == 7 else 12   # só o ano: conta até dezembro
     return ((hoje.year - ano) * 12 + (hoje.month - mes)) / 12
 
 
@@ -208,8 +214,39 @@ def _analise_para_prompt(analise: dict) -> str:
 
 def gerar(llm, kb: KB, vaga: str, analise: dict, idioma: str, cfg: dict | None = None,
           titulo_usuario: str | None = None, verificar_ia: bool = True,
-          limites_manuais: dict[str, int] | None = None) -> Resultado:
+          limites_manuais: dict[str, int] | None = None, correcao: str | None = None) -> Resultado:
+    """Gera, verifica e pontua. Garantia: a versão adaptada não pode pontuar abaixo da versão sem adaptar.
+
+    Se pontuar, o gerador recebe UMA segunda chance, com a lista do que deixou de fora, e fica a melhor das duas.
+    Se ainda assim ficar abaixo, `Resultado.abaixo_do_original` avisa a tela, que oferece a versão sem adaptar.
+    """
     cfg = cfg or config.carregar_config()
+    res = _gerar_uma_vez(llm, kb, vaga, analise, idioma, cfg, titulo_usuario, verificar_ia, limites_manuais, correcao)
+    antes, depois = res.aderencia["antes"], res.aderencia["depois"]
+    if depois["total"] >= antes["total"]:
+        return res
+    perdas = aderencia.o_que_se_perdeu(antes, depois)
+    if correcao is None and verificar_ia and (perdas["palavras"] or perdas["requisitos"]):
+        pedido = ("## Correção (segunda tentativa)\nNa primeira versão você deixou de fora o que a versão sem adaptação "
+                  "já mostrava. Inclua de volta, usando só os fatos que comprovam cada item, sem acrescentar nada novo.")
+        if perdas["palavras"]:
+            pedido += "\n- Palavras-chave da vaga que a base sustenta: " + ", ".join(perdas["palavras"])
+        if perdas["requisitos"]:
+            pedido += "\n- Requisitos que estavam comprovados: " + "; ".join(perdas["requisitos"])
+        try:
+            segunda = _gerar_uma_vez(llm, kb, vaga, analise, idioma, cfg, titulo_usuario, verificar_ia,
+                                     limites_manuais, pedido)
+        except ErroLLM:
+            segunda = None
+        if segunda and segunda.aderencia["depois"]["total"] > depois["total"]:
+            res = segunda
+            res.segunda_tentativa = True
+    res.abaixo_do_original = res.aderencia["depois"]["total"] < res.aderencia["antes"]["total"]
+    return res
+
+
+def _gerar_uma_vez(llm, kb: KB, vaga: str, analise: dict, idioma: str, cfg: dict, titulo_usuario: str | None,
+                   verificar_ia: bool, limites_manuais: dict[str, int] | None, correcao: str | None) -> Resultado:
     if not kb.ids_confirmados():
         raise ErroBase("A base não tem fatos confirmados para gerar um currículo.")
     detalhe = limites_por_experiencia(kb, cfg, analise)
@@ -226,32 +263,62 @@ def gerar(llm, kb: KB, vaga: str, analise: dict, idioma: str, cfg: dict | None =
         f"## Vaga\n{vaga.strip()}\n\n"
         f"## Análise da vaga\n{_analise_para_prompt(analise)}\n\n"
         f"## Base confirmada (use somente isto)\n{kb.para_prompt()}"
-    )
+    ) + (f"\n\n{correcao}" if correcao else "")
     bruto = completar_json(llm, [{"role": "system", "content": sistema}, {"role": "user", "content": usuario}],
                            temperatura=0.3, rotulo="gerador")
     palavras = analise.get("palavras_chave", [])
-    cv = render.montar(kb, bruto, idioma, cfg, titulo_usuario, fiscal="pendente" if verificar_ia else "ausente", limites=limites)
+    sust = {normalizar(p["termo"]): set(p["evidencias"]) for p in analise.get("palavras_chave_base", [])}
+    cv = render.montar(kb, bruto, idioma, cfg, titulo_usuario, fiscal="pendente" if verificar_ia else "ausente",
+                       limites=limites, sustentadas=sust)
     cob = cobertura_palavras(palavras, cv.corpo, kb.textos_confirmados(), cv.mesmo_idioma)
     verificou = False
-    pendentes = cob["fora_indeterminadas"] + cob["usadas_indeterminadas"]
+    duvidosas = termos_duvidosos(kb, analise)
+    pendentes = list(dict.fromkeys(cob["fora_indeterminadas"] + cob["usadas_indeterminadas"] + duvidosas))
+    rejeitados: list[str] = []
     if verificar_ia and (cv.itens_fiscal or pendentes):
         try:
             v = verificar_com_ia(llm, kb, cv.itens_fiscal, pendentes, palavras)
             verificou = True
-            if v["problemas"]:
+            # "Treinou 15 operadores" não comprova "gestão de equipes": o termo deixa de valer como comprovado
+            rejeitados = [t for t in duvidosas if v["palavras"].get(t) is False]
+            for t in rejeitados:
+                sust.pop(normalizar(t), None)
+            if v["problemas"] or rejeitados:
                 # Segunda montagem, sem IA: o código aplica o veredito (remove termos, alerta frases).
-                cv = render.montar(kb, bruto, idioma, cfg, titulo_usuario, veredito=v["problemas"], fiscal="ok", limites=limites)
+                cv = render.montar(kb, bruto, idioma, cfg, titulo_usuario, veredito=v["problemas"], fiscal="ok", limites=limites,
+                                   sustentadas=sust)
                 cob = cobertura_palavras(palavras, cv.corpo, kb.textos_confirmados(), cv.mesmo_idioma)
             _resolver_indeterminadas(cob, v["palavras"])
         except ErroLLM as e:
             # Sem fiscal, volta à regra do código (siglas e termos julgados pelas palavras da base).
-            cv = render.montar(kb, bruto, idioma, cfg, titulo_usuario, fiscal="ausente", limites=limites)
+            cv = render.montar(kb, bruto, idioma, cfg, titulo_usuario, fiscal="ausente", limites=limites, sustentadas=sust)
             cob = cobertura_palavras(palavras, cv.corpo, kb.textos_confirmados(), cv.mesmo_idioma)
             cv.alertas.append(f"A verificação por IA não rodou ({e}). Revise com atenção os termos e frases.")
     res = Resultado(cv, cob, bruto if isinstance(bruto, dict) else {}, verificou, detalhe)
+    if verificou:
+        res.trechos_suspeitos = [k.split("|", 1)[1] for k in v["problemas"] if "|" in k]
+        res.termos_rejeitados = rejeitados
     res.relatorio = relatorio.montar(kb, analise, res, cfg, idioma)
-    res.aderencia = aderencia.comparar(kb, analise, cv.markdown, cv.rastro, cfg, idioma)
+    res.aderencia = aderencia.comparar(kb, analise, cv.markdown, cv.rastro, cfg, idioma,
+                                       suspeitos=res.trechos_suspeitos, rejeitados=res.termos_rejeitados)
     return res
+
+
+def termos_duvidosos(kb: KB, analise: dict, limite: int = 15) -> list[str]:
+    """Palavras-chave que a análise deu como comprovadas, mas que os fatos citados não dizem com as mesmas palavras.
+
+    Pode ser sinônimo legítimo ("devoluções" e "logística reversa") ou um vizinho que não vale ("treinou 15
+    operadores" e "gestão de equipes"). Só um modelo distingue: elas vão para o fiscal por IA, na mesma chamada.
+    Em idiomas diferentes não dá para comparar palavras, e todas vão.
+    """
+    comparavel = analise.get("idioma_vaga") == kb.idioma_base()
+    texto_por_id = {f.id: f.texto for f in kb.fatos("confirmado")}
+    saida = []
+    for p in analise.get("palavras_chave_base", []):
+        palavras = palavras_da_base([texto_por_id[i] for i in p["evidencias"] if i in texto_por_id])
+        if not comparavel or not termo_suportado(p["termo"], palavras, estrito=True):
+            saida.append(p["termo"])
+    return saida[:limite]
 
 
 # ------------------------------------------------------------- fiscal por IA
@@ -267,7 +334,7 @@ def verificar_com_ia(llm, kb: KB, itens: list[dict], palavras_pendentes: list[st
     blocos = []
     for n, it in enumerate(itens):
         fatos = "\n".join(f"   - {f}" for f in it["fatos"]) or "   - (nenhum)"
-        blocos.append(f"[{n}] ({it['tipo']}) {it['texto']}\n   Fatos de apoio:\n{fatos}")
+        blocos.append(f"[{n}] ({it['tipo']}, {it['secao']}) {it['texto']}\n   Fatos de apoio:\n{fatos}")
     usuario = "## Itens do currículo\n" + ("\n\n".join(blocos) or "(nenhum)")
     if palavras_vaga:
         usuario += ("\n\n## Palavras-chave da vaga (ATENÇÃO: é daqui que costumam vir os termos inventados)\n"

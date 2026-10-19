@@ -16,7 +16,7 @@ from .texto import detectar_idioma, normalizar, slugify
 
 MARCA = re.compile(r"^(\s*[-*+]\s*)\[(confirmado|sugerido)\]\s*(.*\S)\s*$", re.I)
 ARQUIVOS_FATOS = ("perfil", "habilidades", "formacao", "certificacoes", "idiomas")
-DATA_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+DATA_RE = re.compile(r"^\d{4}(-(0[1-9]|1[0-2]))?$")   # AAAA-MM, ou só AAAA quando a pessoa não sabe o mês
 CHAVES_CONTATO = ("nome", "titulo_padrao", "titulo_padrao_en", "local", "telefone", "email", "linkedin", "site")
 
 
@@ -102,14 +102,16 @@ def validar_meta_experiencia(meta: dict, nome: str = "") -> dict:
         m[campo] = str(m[campo]).strip()
     m["inicio"] = str(m.get("inicio", "")).strip()
     if not DATA_RE.match(m["inicio"]):
-        raise ErroBase(f"{prefixo}'inicio' precisa estar no formato AAAA-MM (ex.: 2022-03).")
+        raise ErroBase(f"{prefixo}'inicio' precisa estar no formato AAAA-MM (ex.: 2022-03), ou só o ano (2022) se "
+                       "você não lembra o mês.")
     fim = str(m.get("fim", "")).strip().lower()
     if fim in ("atual", "presente", "present", "current"):
         fim = "atual"
     if fim != "atual" and not DATA_RE.match(fim):
-        raise ErroBase(f"{prefixo}'fim' precisa ser AAAA-MM ou 'atual'.")
+        raise ErroBase(f"{prefixo}'fim' precisa ser AAAA-MM, só o ano (AAAA) ou 'atual'.")
     m["fim"] = fim
-    if fim != "atual" and fim < m["inicio"]:
+    # só compara o mês quando as duas datas têm mês ("2016" a "2016-05" é válido)
+    if fim != "atual" and (fim[:4] < m["inicio"][:4] or (len(fim) == len(m["inicio"]) == 7 and fim < m["inicio"])):
         raise ErroBase(f"{prefixo}'fim' é anterior a 'inicio'.")
     for campo in ("local", "cargo_en", "local_en", "cargo_pt", "local_pt"):
         if campo in m:
@@ -233,7 +235,7 @@ class KB:
             base = {"slug": a.slug, "empresa": a.meta["empresa"], "cargo": a.meta["cargo"]}
             nome = f"{a.meta['cargo']} na {a.meta['empresa']}"
             if len(fs) < 3:
-                saida.append({"tipo": "poucos_fatos", "rotulo": f"{nome}: poucos detalhes ({len(fs)} fato(s))", **base})
+                saida.append({"tipo": "poucos_fatos", "rotulo": f"{nome}: poucos detalhes ({len(fs)} {'item' if len(fs) == 1 else 'itens'})", **base})
             elif not re.search(r"\d", " ".join(f.texto for f in fs)):
                 saida.append({"tipo": "sem_numeros", "rotulo": f"{nome}: nenhum número ou resultado medido", **base})
         for slug, rotulo in (("formacao", "formação"), ("idiomas", "idiomas"),
@@ -249,7 +251,7 @@ class KB:
         confirmados = len(self.fatos("confirmado"))
         pendentes = len(self.fatos("sugerido"))
         if pendentes:
-            avisos.append(f"{pendentes} fato(s) pendente(s) NÃO contam na análise. Confirme ou remova na aba Minha base.")
+            avisos.append(f"{pendentes} informação(ões) a confirmar NÃO contam na análise. Confirme ou remova em Meu histórico.")
         vazias = [r["rotulo"] for r in self.lacunas() if r["tipo"] == "secao_vazia"]
         if vazias:
             avisos.append("A base não tem: " + ", ".join(vazias) + ". Se você importou um currículo, confira se salvou a revisão.")
@@ -329,6 +331,48 @@ class KB:
         arq.linhas[f.linha] = f"{m.group(1)}[{f.status}] {' '.join(texto.split())}"
         arq.gravar()
 
+    def substituir_fatos(self, slug: str, itens: list[tuple[str, str]]) -> None:
+        """Troca todos os fatos marcados de um arquivo pela lista (texto, status), na ordem dada.
+
+        Linhas livres (sem marca) ficam onde estavam. Os fatos novos entram no lugar do primeiro fato antigo
+        (ou no fim, se não havia nenhum). Duplicados pelo texto normalizado são descartados.
+        """
+        caminho = self._caminho(slug)
+        if caminho is None:
+            raise ErroBase(f"Arquivo desconhecido: '{slug}'.")
+        arq = Arquivo.ler(caminho, slug) if caminho.exists() else Arquivo(slug, caminho, [], 0, {})
+        antigos = [f.linha for f in arq.fatos()]
+        novas, vistos = [], set()
+        for texto, status in itens:
+            texto = " ".join(str(texto).split())
+            if status not in ("confirmado", "sugerido"):
+                raise ErroBase(f"Status inválido: {status}")
+            if texto and _norm_fato(texto) not in vistos:
+                vistos.add(_norm_fato(texto))
+                novas.append(f"- [{status}] {texto}")
+        posicao = antigos[0] if antigos else len(arq.linhas)
+        for i in sorted(antigos, reverse=True):
+            del arq.linhas[i]
+        arq.linhas[posicao:posicao] = novas
+        arq.gravar()
+
+    def atualizar_experiencia(self, slug: str, campos: dict) -> None:
+        """Atualiza o cabeçalho de uma experiência (empresa, cargo, datas, local...), preservando os fatos."""
+        caminho = self._caminho(slug)
+        if caminho is None or not caminho.exists() or caminho.parent.name != "experiencias":
+            raise ErroBase(f"Experiência '{slug}' não encontrada.")
+        arq = Arquivo.ler(caminho, slug)
+        meta = validar_meta_experiencia({**arq.meta, **campos}, caminho.name)
+        texto = montar_texto_experiencia(meta, arq.linhas[arq.corpo_ini:])
+        with open(caminho, "w", encoding="utf-8", newline="\n") as f:
+            f.write(texto.rstrip("\n") + "\n")
+
+    def remover_experiencia(self, slug: str) -> None:
+        caminho = self._caminho(slug)
+        if caminho is None or not caminho.exists() or caminho.parent.name != "experiencias":
+            raise ErroBase(f"Experiência '{slug}' não encontrada.")
+        caminho.unlink()
+
     def criar_experiencia(self, meta: dict) -> str:
         m = validar_meta_experiencia(meta)
         base_slug = slugify(f"{m['empresa']}-{m['cargo']}")
@@ -407,7 +451,10 @@ class KB:
     @staticmethod
     def _cabecalho_exp(a: Arquivo) -> str:
         m = a.meta
-        return f"{m['empresa']} | {m['cargo']} | {m['inicio']} a {m['fim']}" + (f" | {m['local']}" if m.get("local") else "")
+        # traduções confirmadas do cargo: o gerador usa a forma do idioma de saída também no resumo
+        trad = "; ".join(f"{k[-2:]}: {m[k]}" for k in ("cargo_en", "cargo_pt") if m.get(k))
+        cargo = f"{m['cargo']} ({trad})" if trad else m["cargo"]
+        return f"{m['empresa']} | {cargo} | {m['inicio']} a {m['fim']}" + (f" | {m['local']}" if m.get("local") else "")
 
     def para_prompt(self) -> str:
         """Só fatos [confirmado], com id. Sem contato e sem fatos pendentes. Experiências ocultas ficam de fora."""

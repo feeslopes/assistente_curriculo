@@ -67,10 +67,20 @@ class TestKB(unittest.TestCase):
 
     def test_meta_invalida(self):
         for meta in ({"empresa": "", "cargo": "x", "inicio": "2020-01", "fim": "atual"},
-                     {"empresa": "A", "cargo": "x", "inicio": "2020", "fim": "atual"},
-                     {"empresa": "A", "cargo": "x", "inicio": "2020-05", "fim": "2020-01"}):
+                     {"empresa": "A", "cargo": "x", "inicio": "03/2020", "fim": "atual"},
+                     {"empresa": "A", "cargo": "x", "inicio": "2020-13", "fim": "atual"},
+                     {"empresa": "A", "cargo": "x", "inicio": "2020-05", "fim": "2020-01"},
+                     {"empresa": "A", "cargo": "x", "inicio": "2020", "fim": "2019"}):
             with self.assertRaises(ErroBase):
                 self.kb.criar_experiencia(meta)
+
+    def test_data_so_com_ano_e_aceita(self):
+        """Currículo real costuma ter só o ano. Exigir o mês obrigaria a pessoa a inventar um."""
+        slug = self.kb.criar_experiencia({"empresa": "Transportadora", "cargo": "Assistente", "inicio": "2016",
+                                          "fim": "2017"})
+        self.kb.criar_experiencia({"empresa": "B", "cargo": "y", "inicio": "2016", "fim": "2016-05"})   # mesmo ano
+        exp = next(a for a in self.kb.experiencias() if a.slug == slug)
+        self.assertEqual((exp.meta["inicio"], exp.meta["fim"]), ("2016", "2017"))
 
     def test_frontmatter_invalido_vai_para_erros(self):
         p = self.kb.base / "experiencias" / "quebrada.md"
@@ -136,7 +146,7 @@ class TestLacunas(unittest.TestCase):
         self.assertEqual(tipos.count("secao_vazia"), 4)
 
     def test_diagnostico_aponta_pendentes_e_secoes_vazias(self):
-        self.assertTrue(any("pendente" in a for a in self.kb.diagnostico()))
+        self.assertTrue(any("a confirmar" in a for a in self.kb.diagnostico()))
         import os
         os.remove(self.kb.base / "formacao.md")
         self.assertTrue(any("formação" in a for a in self.kb.diagnostico()))
