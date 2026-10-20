@@ -162,14 +162,22 @@ def passo_encaixe(kb: KB, analise: dict) -> None:
                     comum.avisar("info", "Nenhuma resposta para registrar.")
                 st.rerun()
 
-    base = [p["termo"] for p in analise.get("palavras_chave_base", [])]
-    sem = [p for p in analise["palavras_chave"] if p.lower() not in {b.lower() for b in base}]
-    if base or sem:
+    sustentadas = aderencia.palavras_sustentadas(kb, analise)     # a mesma regra do índice e do currículo gerado
+    rejeitadas = {t.lower() for t in analise.get("palavras_rejeitadas", [])}
+    base = [p for p in analise["palavras_chave"] if p.lower() in sustentadas]
+    quase = [p for p in analise["palavras_chave"] if p.lower() not in sustentadas and p.lower() in rejeitadas]
+    sem = [p for p in analise["palavras_chave"] if p.lower() not in sustentadas and p.lower() not in rejeitadas]
+    if base or sem or quase:
         with st.container(border=True):
             st.markdown("**Palavras-chave da vaga**")
             st.caption("Sistemas de triagem procuram estas palavras. As verdes estão no seu histórico e vão para o "
                        "currículo. As cinzas só entram se você tiver essa experiência e contar acima.")
             estilo.etiquetas(base, "ok")
+            if quase:
+                st.caption("Em amarelo: o seu histórico tem algo parecido, mas não diz isso de forma explícita, então "
+                           "não vão para o currículo. Se você tem essa experiência, conte com as suas palavras nas "
+                           "perguntas acima ou em Meu histórico.")
+                estilo.etiquetas(quase, "tem")
             estilo.etiquetas(sem, "nao")
     if st.button("Continuar: montar o currículo", key="btn_para_gerar", type="primary", icon=":material/arrow_forward:"):
         st.session_state["passo_vaga"] = 3
@@ -431,9 +439,16 @@ def vista_melhorar(res, comp: dict | None) -> None:
         st.markdown("**Palavras-chave da vaga neste currículo**")
         st.caption("Verde: no currículo e comprovadas. Amarelo: o seu histórico tem, mas o texto não usou. "
                    "Cinza: não estão no seu histórico, e por isso ficaram de fora.")
+        rejeitadas = {t.lower() for t in res.termos_rejeitados}
+        sem = cob["fora_sem_base"] + cob["fora_indeterminadas"]
         estilo.etiquetas(cob["usadas"] + cob["usadas_indeterminadas"], "ok")
         estilo.etiquetas(cob["fora_com_base"], "tem")
-        estilo.etiquetas(cob["fora_sem_base"] + cob["fora_indeterminadas"], "nao")
+        estilo.etiquetas([p for p in sem if p.lower() not in rejeitadas], "nao")
+        quase = [p for p in sem if p.lower() in rejeitadas]
+        if quase:
+            st.caption("Parecidas com algo do seu histórico, mas ele não diz isso de forma explícita, então ficaram de "
+                       "fora. Se você tem essa experiência, conte em Meu histórico e gere de novo:")
+            estilo.etiquetas(quase, "nao")
         if cob["usadas_sem_base"]:
             st.warning("Aparecem no currículo, mas o seu histórico não comprova. Confira: "
                        + ", ".join(cob["usadas_sem_base"]), icon=":material/warning:")
@@ -494,7 +509,10 @@ def resultado(kb: KB, cfg: dict, ctx: dict | None = None) -> None:
                 st.rerun()
         elif res.segunda_tentativa:
             st.caption(":material/autorenew: A primeira versão ficou abaixo do seu currículo sem adaptar, então eu refiz "
-                       "uma vez pedindo de volta o que tinha ficado de fora.")
+                       "pedindo de volta o que tinha ficado de fora.")
+        elif "plano" in res.correcoes:
+            st.caption(":material/autorenew: A primeira versão deixou de fora palavras-chave que o seu histórico "
+                       "comprova, então eu refiz pedindo que entrassem.")
     aviso_paginas(texto_atual, cfg, res)
     if "_vista_res" in st.session_state:
         st.session_state["vista_resultado"] = st.session_state.pop("_vista_res")
