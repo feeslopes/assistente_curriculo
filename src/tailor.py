@@ -2,14 +2,15 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, field
 from datetime import date
 
-from . import aderencia, config, interview, relatorio, render
+from . import aderencia, config, interview, plano, relatorio, render
 from .kb import KB, ErroBase
 from .llm import ErroLLM, completar_json
 from .texto import detectar_idioma, normalizar
-from .verify import cobertura_palavras, palavras_da_base, percentual, termo_suportado
+from .verify import _contem, cobertura_palavras, palavras_da_base, percentual, termo_suportado
 
 STATUS = ("coberto", "parcial", "lacuna")
 NOMES_IDIOMA = {"pt": "Português do Brasil", "en": "English (inglês)"}
@@ -30,6 +31,8 @@ class Resultado:
     segunda_tentativa: bool = False    # a primeira versão pontuou abaixo da original e foi refeita
     abaixo_do_original: bool = False   # mesmo assim ficou abaixo: a tela oferece a versão sem adaptar
     condensada: bool = False           # passou do limite de páginas e foi refeita mais curta
+    correcoes: list[str] = field(default_factory=list)   # o que o código pediu para corrigir: tamanho, garantia, plano
+    plano: dict = field(default_factory=dict)          # ver plano.montar
 
 
 # ------------------------------------------------------------------------ análise
@@ -96,7 +99,35 @@ def analisar(llm, kb: KB, vaga: str) -> dict:
         {"role": "system", "content": config.ler_prompt("analisador")},
         {"role": "user", "content": f"## Vaga\n{vaga.strip()}\n\n## Base confirmada\n{kb.para_prompt()}"},
     ]
-    return validar_analise(completar_json(llm, msgs, rotulo="analisador"), ids_ok)
+    analise = validar_analise(completar_json(llm, msgs, rotulo="analisador"), ids_ok)
+    julgar_termos(llm, kb, analise)
+    return analise
+
+
+def julgar_termos(llm, kb: KB, analise: dict) -> None:
+    """O fiscal por IA decide UMA vez, na análise, se cada termo duvidoso vale ("devoluções" e "logística reversa")
+    ou não ("treinou 15 operadores" e "gestão de equipes").
+
+    Antes isso acontecia a cada geração, e a resposta podia mudar: o encaixe dizia "você tem" e o currículo gerado
+    dizia "ficou de fora", e a nota oscilava. Grava `palavras_julgadas` e `palavras_rejeitadas` na análise. Se o fiscal
+    falhar, não grava nada e a geração julga como antes.
+    """
+    duvidosas = termos_duvidosos(kb, analise)
+    if not duvidosas:
+        analise["palavras_julgadas"], analise["palavras_rejeitadas"] = [], []
+        return
+    # Cada termo vai como um item com os SEUS fatos de apoio (o mesmo formato e o mesmo rigor de um termo de
+    # competência no currículo). Com a base inteira à vista, o fiscal tende a aceitar por dedução.
+    texto_por_id = {f.id: f.texto for f in kb.fatos("confirmado")}
+    evid = {p["termo"]: p["evidencias"] for p in analise.get("palavras_chave_base", [])}
+    itens = [{"tipo": "termo", "secao": "palavra-chave da vaga", "texto": t, "chave": t,
+              "fatos": [texto_por_id[i] for i in evid.get(t, []) if i in texto_por_id]} for t in duvidosas]
+    try:
+        v = verificar_com_ia(llm, kb, itens, [], analise.get("palavras_chave", []))
+    except ErroLLM:
+        return
+    analise["palavras_julgadas"] = duvidosas
+    analise["palavras_rejeitadas"] = [t for t in duvidosas if t in v["problemas"]]
 
 
 def perguntas_lacuna(analise: dict) -> list[dict]:
@@ -223,14 +254,18 @@ def _limites(cfg: dict, kb: KB, limites: dict[str, dict]) -> str:
 
 
 def _analise_para_prompt(analise: dict) -> str:
+    rejeitadas = {t.lower() for t in analise.get("palavras_rejeitadas", [])}
     enxuta = {
         "titulo_vaga": analise.get("titulo_vaga"),
         # o que a base sustenta (com os fatos) e o que NÃO pode ser usado: o gerador casa o vocabulário só no primeiro
+        # (os termos que o fiscal rejeitou na análise contam como sem base: a mesma regra do resto do app)
         "palavras_chave_que_a_base_sustenta": [
-            {"termo": p["termo"], "fatos": p["evidencias"]} for p in analise.get("palavras_chave_base", [])],
+            {"termo": p["termo"], "fatos": p["evidencias"]} for p in analise.get("palavras_chave_base", [])
+            if p["termo"].lower() not in rejeitadas],
         "palavras_chave_sem_base_NAO_USE": [
             p for p in analise.get("palavras_chave", [])
-            if p.lower() not in {x["termo"].lower() for x in analise.get("palavras_chave_base", [])}],
+            if p.lower() in rejeitadas
+            or p.lower() not in {x["termo"].lower() for x in analise.get("palavras_chave_base", [])}],
         "requisitos": [{k: r[k] for k in ("requisito", "tipo", "status", "evidencias")}
                        for r in analise.get("requisitos", [])],
     }
@@ -240,37 +275,26 @@ def _analise_para_prompt(analise: dict) -> str:
 def gerar(llm, kb: KB, vaga: str, analise: dict, idioma: str, cfg: dict | None = None,
           titulo_usuario: str | None = None, verificar_ia: bool = True,
           limites_manuais: dict[str, int] | None = None, correcao: str | None = None) -> Resultado:
-    """Gera, verifica e pontua. Garantia: a versão adaptada não pode pontuar abaixo da versão sem adaptar.
+    """Gera, verifica e pontua, com até duas correções conferidas pelo código.
 
-    Se pontuar, o gerador recebe UMA segunda chance, com a lista do que deixou de fora, e fica a melhor das duas.
-    Se ainda assim ficar abaixo, `Resultado.abaixo_do_original` avisa a tela, que oferece a versão sem adaptar.
+    O gerador segue um plano de conteúdo (src/plano.py). Depois, o código confere três coisas e, se alguma falhar,
+    devolve ao gerador um pedido de correção com a lista exata do que falta:
+    - tamanho: o PDF passou do limite de páginas;
+    - garantia: a nota ficou abaixo da versão sem adaptar;
+    - plano: palavras-chave ou requisitos comprovados que o texto deixou de mostrar.
+    Fica a melhor versão (a que cabe e, depois, a de maior nota). Se ainda assim ficar abaixo da versão sem adaptar,
+    `Resultado.abaixo_do_original` avisa a tela, que oferece a versão sem adaptar.
     """
     cfg = cfg or config.carregar_config()
     res = _gerar_uma_vez(llm, kb, vaga, analise, idioma, cfg, titulo_usuario, verificar_ia, limites_manuais, correcao)
-    if verificar_ia and correcao is None:      # primeiro o tamanho: passar de página também derruba a nota
-        res = _caber_nas_paginas(llm, kb, vaga, analise, idioma, cfg, titulo_usuario, limites_manuais, res)
-    antes, depois = res.aderencia["antes"], res.aderencia["depois"]
-    if depois["total"] >= antes["total"]:
-        return res
-    perdas = aderencia.o_que_se_perdeu(antes, depois)
-    if correcao is None and verificar_ia and (perdas["palavras"] or perdas["requisitos"]):
-        pedido = ("## Correção (segunda tentativa)\nNa primeira versão você deixou de fora o que a versão sem adaptação "
-                  "já mostrava. Inclua de volta, usando só os fatos que comprovam cada item, sem acrescentar nada novo.")
-        if perdas["palavras"]:
-            pedido += "\n- Palavras-chave da vaga que a base sustenta: " + ", ".join(perdas["palavras"])
-        if perdas["requisitos"]:
-            pedido += "\n- Requisitos que estavam comprovados: " + "; ".join(perdas["requisitos"])
-        try:
-            segunda = _gerar_uma_vez(llm, kb, vaga, analise, idioma, cfg, titulo_usuario, verificar_ia,
-                                     limites_manuais, pedido)
-        except ErroLLM:
-            segunda = None
-        if segunda and segunda.aderencia["depois"]["total"] > depois["total"]:
-            segunda.condensada = res.condensada
-            res = segunda
-            res.segunda_tentativa = True
+    if verificar_ia and correcao is None:
+        res = _corrigir(llm, kb, vaga, analise, idioma, cfg, titulo_usuario, limites_manuais, res)
     res.abaixo_do_original = res.aderencia["depois"]["total"] < res.aderencia["antes"]["total"]
     return res
+
+
+# Diferença mínima entre a nota e o máximo para valer uma correção pelo plano (cerca de 2 palavras-chave).
+FOLGA_PLANO = 4
 
 
 def _palavras_na_ultima_pagina(markdown: str) -> int | None:
@@ -285,45 +309,101 @@ def _palavras_na_ultima_pagina(markdown: str) -> int | None:
         return None
 
 
-def _caber_nas_paginas(llm, kb: KB, vaga: str, analise: dict, idioma: str, cfg: dict, titulo_usuario: str | None,
-                       limites_manuais: dict[str, int] | None, res: Resultado) -> Resultado:
-    """Se o PDF passou do limite de páginas, pede ao gerador que condense (até duas vezes).
+def _medidas_de_tamanho(markdown: str, limite: int) -> tuple[int, float]:
+    """(palavras nas páginas além do limite, média de palavras por bullet). Sem PDF legível: (60, 25)."""
+    from . import export
+    bullets = [l[2:] for l in markdown.splitlines() if l.startswith("* ") and not l.startswith("* **")]
+    media = sum(len(b.split()) for b in bullets) / len(bullets) if bullets else 25.0
+    try:
+        import io
 
-    O texto é que se ajusta: as palavras-chave que a base sustenta continuam valendo. Na segunda tentativa, a
-    experiência que menos pesa na vaga perde também um bullet. Fica a versão que cabe; se nenhuma couber, a que
-    tem menos páginas e, em empate, a de maior pontuação.
-    """
+        from pypdf import PdfReader
+        paginas = PdfReader(io.BytesIO(export.gerar_pdf(markdown)[0])).pages
+        return sum(len(p.extract_text().split()) for p in paginas[limite:]), media
+    except Exception:
+        return 60, media
+
+
+def _faltas_do_plano(res: Resultado) -> tuple[list[str], list[str]]:
+    """Palavras-chave comprovadas que o texto não usou e requisitos comprovados que o texto não mostra."""
+    comp = res.aderencia["depois"]["componentes"]
+    pal = comp.get("palavras", {}).get("detalhe", {})
+    palavras = list(pal.get("sustentadas_ausentes", [])) + list(pal.get("parecidas_ausentes", []))
+    reqs = [x["requisito"] for k in ("obrigatorios", "desejaveis") if k in comp
+            for x in comp[k]["detalhe"]["itens"] if x["maximo"] and not x["no_curriculo"]]
+    return palavras, reqs
+
+
+def _problemas(res: Resultado, kb: KB, analise: dict, cfg: dict) -> dict:
+    """O que o código encontrou de errado nesta versão: {"tamanho": pedido, "garantia": pedido, "plano": pedido}."""
+    saida = {}
+    limite = int(cfg.get("max_paginas", 2))
+    depois, antes = res.aderencia["depois"], res.aderencia["antes"]
+    paginas = depois.get("paginas") or 0
+    if paginas > limite:
+        sobra = _palavras_na_ultima_pagina(res.curriculo.markdown)
+        saida["tamanho"] = (f"## Correção (tamanho)\nO PDF ficou com {paginas} páginas e o limite é {limite}"
+                            + (f" (a última tem só {sobra} palavras)" if sobra is not None else "") + ". Reescreva o "
+                            "currículo inteiro mais curto: junte fatos parecidos num bullet só, tire detalhes secundários "
+                            "e use frases mais enxutas. Mantenha as palavras-chave da vaga que a base sustenta.")
+    if depois["total"] < antes["total"]:
+        perdas = aderencia.o_que_se_perdeu(antes, depois)
+        if perdas["palavras"] or perdas["requisitos"]:
+            t = ("## Correção (segunda tentativa)\nNa versão anterior você deixou de fora o que a versão sem adaptação "
+                 "já mostrava. Inclua de volta, usando só os fatos que comprovam cada item, sem acrescentar nada novo.")
+            if perdas["palavras"]:
+                t += "\n- Palavras-chave da vaga que a base sustenta: " + ", ".join(perdas["palavras"])
+            if perdas["requisitos"]:
+                t += "\n- Requisitos que estavam comprovados: " + "; ".join(perdas["requisitos"])
+            saida["garantia"] = t
+    palavras, reqs = _faltas_do_plano(res)
+    if (palavras or reqs) and depois["total"] < depois["teto"] - FOLGA_PLANO and not analise.get("geral"):
+        sust = aderencia.palavras_sustentadas(kb, analise, res.termos_rejeitados)
+        ev_req = {r["requisito"]: r.get("evidencias", []) for r in analise.get("requisitos", [])}
+        t = ("## Correção (plano)\nO texto deixou de mostrar itens que a base comprova. Inclua cada um no bullet do fato "
+             "indicado ou nas competências (como competência legível), citando o fato em `fontes`. Não amontoe termos "
+             "no resumo, não acrescente nada que os fatos não digam e mantenha o que já estava certo.")
+        for p in palavras:
+            t += f'\n- Palavra-chave "{p}" (fatos: {", ".join(sust.get(p.lower(), [])[:3])})'
+        for r in reqs:
+            t += f'\n- Requisito "{r}" (fatos: {", ".join(ev_req.get(r, [])[:3])})'
+        saida["plano"] = t
+    return saida
+
+
+def _corrigir(llm, kb: KB, vaga: str, analise: dict, idioma: str, cfg: dict, titulo_usuario: str | None,
+              limites_manuais: dict[str, int] | None, res: Resultado) -> Resultado:
+    """Até duas correções. Na segunda por tamanho, a experiência que menos pesa na vaga perde também um bullet."""
     limite = int(cfg.get("max_paginas", 2))
 
     def chave(r: Resultado) -> tuple:
         pg = r.aderencia["depois"].get("paginas") or 0
         return (pg <= limite, -pg if pg > limite else 0, r.aderencia["depois"]["total"])
 
-    pesos = relevancia_por_experiencia(analise)
     manuais = {slug: v["limite"] for slug, v in res.limites.items()}
     manuais.update(limites_manuais or {})
+    atual = res
     for tentativa in range(2):
-        paginas = res.aderencia["depois"].get("paginas") or 0
-        if paginas <= limite:
+        problemas = _problemas(atual, kb, analise, cfg)
+        if not problemas:
             break
-        sobra = _palavras_na_ultima_pagina(res.curriculo.markdown)
-        pedido = (f"## Correção (tamanho)\nO PDF ficou com {paginas} páginas e o limite é {limite}"
-                  + (f" (a última tem só {sobra} palavras)" if sobra is not None else "") + ". Reescreva o currículo "
-                  "inteiro mais curto: junte fatos parecidos num bullet só, tire detalhes secundários e use frases "
-                  "mais enxutas. Mantenha as palavras-chave da vaga que a base sustenta e use só os mesmos fatos.")
-        if tentativa == 1:
-            # precisa de mais corte: a experiência que menos pesa na vaga (e a mais antiga em empate) perde um bullet
-            candidatas = [e for e in kb.experiencias() if manuais.get(e.slug, 0) >= 2]
-            if candidatas:
-                menos = min(reversed(candidatas), key=lambda e: pesos.get(e.slug, 0))
-                manuais[menos.slug] -= 1
+        if "tamanho" in problemas:
+            # Pedir "mais curto" não basta: o modelo encurta pouco. O código tira os bullets que faltam, de onde valem
+            # menos para a vaga, na medida do que passou (palavras além do limite / palavras por bullet).
+            excesso, media = _medidas_de_tamanho(atual.curriculo.markdown, limite)
+            quantos = max(1, math.ceil((excesso + 15) / max(media, 8)))
+            manuais = plano.cortar_bullets(kb, analise, manuais, aderencia.palavras_sustentadas(kb, analise), quantos)
         try:
-            nova = _gerar_uma_vez(llm, kb, vaga, analise, idioma, cfg, titulo_usuario, True, manuais, pedido)
+            nova = _gerar_uma_vez(llm, kb, vaga, analise, idioma, cfg, titulo_usuario, True, manuais,
+                                  "\n\n".join(problemas.values()))
         except ErroLLM:
             break
+        nova.condensada = atual.condensada or "tamanho" in problemas
+        nova.segunda_tentativa = atual.segunda_tentativa or "garantia" in problemas
+        nova.correcoes = atual.correcoes + [k for k in problemas if k not in atual.correcoes]
+        atual = nova
         if chave(nova) > chave(res):
             res = nova
-            res.condensada = True
     return res
 
 
@@ -363,9 +443,13 @@ def _gerar_uma_vez(llm, kb: KB, vaga: str, analise: dict, idioma: str, cfg: dict
         if slug in detalhe and int(n) != detalhe[slug]["limite"]:
             detalhe[slug] = {**detalhe[slug], "limite": int(n), "motivo": "ajustado por você"}
     limites = {slug: v["limite"] for slug, v in detalhe.items()}
-    sistema = "\n\n".join([config.ler_prompt("gerador"),
-                           "# Guidelines de escrita\n" + config.ler_guidelines(),
-                           _limites(cfg, kb, detalhe)])
+    julgada = "palavras_julgadas" in analise          # o fiscal já decidiu os termos duvidosos na análise
+    plano_conteudo = plano.montar(kb, analise, limites, aderencia.palavras_sustentadas(kb, analise))
+    partes = [config.ler_prompt("gerador"), "# Guidelines de escrita\n" + config.ler_guidelines(),
+              _limites(cfg, kb, detalhe)]
+    if not analise.get("geral"):
+        partes.append(plano.para_prompt(plano_conteudo))
+    sistema = "\n\n".join(partes)
     usuario = (
         f"## Idioma de saída\n{NOMES_IDIOMA[idioma]}. Escreva TODO o conteúdo nesse idioma.\n\n"
         f"## Título escolhido pela candidata\n{titulo_usuario.strip() if titulo_usuario and titulo_usuario.strip() else '(nenhum)'}\n\n"
@@ -374,14 +458,16 @@ def _gerar_uma_vez(llm, kb: KB, vaga: str, analise: dict, idioma: str, cfg: dict
         f"## Base confirmada (use somente isto)\n{kb.para_prompt()}"
     ) + (f"\n\n{correcao}" if correcao else "")
     bruto = completar_json(llm, [{"role": "system", "content": sistema}, {"role": "user", "content": usuario}],
-                           temperatura=0.3, rotulo="gerador")
+                           temperatura=0.0, rotulo="gerador")
     palavras = analise.get("palavras_chave", [])
-    sust = {normalizar(p["termo"]): set(p["evidencias"]) for p in analise.get("palavras_chave_base", [])}
+    ja_rejeitadas = {normalizar(t) for t in analise.get("palavras_rejeitadas", [])}
+    sust = {normalizar(p["termo"]): set(p["evidencias"]) for p in analise.get("palavras_chave_base", [])
+            if normalizar(p["termo"]) not in ja_rejeitadas}
     cv = render.montar(kb, bruto, idioma, cfg, titulo_usuario, fiscal="pendente" if verificar_ia else "ausente",
                        limites=limites, sustentadas=sust)
     cob = cobertura_palavras(palavras, cv.corpo, kb.textos_confirmados(), cv.mesmo_idioma)
     verificou = False
-    duvidosas = termos_duvidosos(kb, analise)
+    duvidosas = [] if julgada else termos_duvidosos(kb, analise)
     pendentes = list(dict.fromkeys(cob["fora_indeterminadas"] + cob["usadas_indeterminadas"] + duvidosas))
     rejeitados: list[str] = []
     if verificar_ia and (cv.itens_fiscal or pendentes):
@@ -404,13 +490,33 @@ def _gerar_uma_vez(llm, kb: KB, vaga: str, analise: dict, idioma: str, cfg: dict
             cob = cobertura_palavras(palavras, cv.corpo, kb.textos_confirmados(), cv.mesmo_idioma)
             cv.alertas.append(f"A verificação por IA não rodou ({e}). Revise com atenção os termos e frases.")
     res = Resultado(cv, cob, bruto if isinstance(bruto, dict) else {}, verificou, detalhe)
+    res.plano = plano_conteudo
+    res.termos_rejeitados = list(analise.get("palavras_rejeitadas", []))
     if verificou:
         res.trechos_suspeitos = [k.split("|", 1)[1] for k in v["problemas"] if "|" in k]
-        res.termos_rejeitados = rejeitados
+        res.termos_rejeitados += rejeitados
+    alinhar_cobertura(cob, aderencia.palavras_sustentadas(kb, analise, res.termos_rejeitados), cv.corpo)
     res.relatorio = relatorio.montar(kb, analise, res, cfg, idioma)
     res.aderencia = aderencia.comparar(kb, analise, cv.markdown, cv.rastro, cfg, idioma,
                                        suspeitos=res.trechos_suspeitos, rejeitados=res.termos_rejeitados)
     return res
+
+
+def alinhar_cobertura(cob: dict, sustentadas: dict[str, list[str]], corpo: str) -> None:
+    """Reclassifica as palavras comparáveis pela regra única de "você tem" (aderencia.palavras_sustentadas).
+
+    A cobertura nasce de uma busca literal no histórico, que não enxerga sinônimo direto ("metodologias ágeis" e
+    "ambientes ágeis"). Sem isto, o encaixe dizia "você tem" e, depois de gerar, a mesma palavra aparecia como "ficou
+    de fora por falta de base". As indeterminadas (saída traduzida) continuam com o fiscal.
+    """
+    comparaveis = cob["usadas"] + cob["usadas_sem_base"] + cob["fora_com_base"] + cob["fora_sem_base"]
+    for k in ("usadas", "usadas_sem_base", "fora_com_base", "fora_sem_base"):
+        cob[k] = []
+    final = normalizar(corpo)
+    for p in comparaveis:
+        tem, no_texto = p.lower() in sustentadas, _contem(final, normalizar(p))
+        cob[("usadas" if tem else "usadas_sem_base") if no_texto else ("fora_com_base" if tem else "fora_sem_base")].append(p)
+    cob["percentual"] = percentual(cob)
 
 
 def termos_duvidosos(kb: KB, analise: dict, limite: int = 15) -> list[str]:

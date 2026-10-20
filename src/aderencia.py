@@ -131,6 +131,33 @@ def _idioma_valido_para_palavras(analise: dict, idioma_cv: str) -> bool:
     return not (iv in ("pt", "en") and iv != idioma_cv)
 
 
+def palavras_sustentadas(kb: KB, analise: dict, rejeitados: list[str] | None = None) -> dict[str, list[str]]:
+    """Palavras-chave da vaga que o histórico comprova: {termo em minúsculas: ids dos fatos}.
+
+    É a regra ÚNICA do app para "você tem esta palavra": vale no encaixe, nos selos depois de gerar, no relatório e
+    no índice. Junta o que a análise ligou a fatos (inclui sinônimo direto), menos o que o fiscal por IA não
+    confirmou (`rejeitados`), mais o que está escrito com as mesmas palavras no histórico e a análise esqueceu.
+    """
+    kws = analise.get("palavras_chave", [])
+    fora = {t.lower() for t in (rejeitados if rejeitados is not None else analise.get("palavras_rejeitadas", []))}
+    base = {p["termo"].lower(): p["evidencias"] for p in analise.get("palavras_chave_base", [])
+            if p["termo"].lower() not in fora and p.get("evidencias")}
+    # A análise às vezes esquece um termo que está escrito no histórico ("centros de distribuição" num fato, ou no
+    # nome da empresa). O código acha esses sozinho, quando vaga e histórico estão no mesmo idioma.
+    if analise.get("idioma_vaga") == kb.idioma_base():
+        confirmados = kb.fatos("confirmado")
+        for k in kws:
+            if k.lower() in base or k.lower() in fora:
+                continue
+            evid = [f.id for f in confirmados if contem_termo(f.texto, k)]
+            for e in kb.experiencias():
+                if contem_termo(" ".join(str(e.meta.get(c, "")) for c in ("cargo", "empresa")), k):
+                    evid += [f.id for f in confirmados if f.slug == e.slug]
+            if evid:
+                base[k.lower()] = list(dict.fromkeys(evid))
+    return base
+
+
 def calcular(analise: dict, markdown: str, rastro: list[dict], kb: KB, cfg: dict, idioma_cv: str,
              paginas: int | None = None, suspeitos: list[str] | None = None,
              rejeitados: list[str] | None = None) -> dict:
@@ -147,22 +174,7 @@ def calcular(analise: dict, markdown: str, rastro: list[dict], kb: KB, cfg: dict
 
     # palavras-chave
     kws = analise.get("palavras_chave", [])
-    fora = {t.lower() for t in rejeitados or []}       # o fiscal por IA não confirmou: não vale como comprovado
-    base = {p["termo"].lower(): p["evidencias"] for p in analise.get("palavras_chave_base", [])
-            if p["termo"].lower() not in fora}
-    # A análise às vezes esquece um termo que está escrito no histórico ("centros de distribuição" num fato, ou no
-    # nome da empresa). O código acha esses sozinho, quando vaga e histórico estão no mesmo idioma.
-    if analise.get("idioma_vaga") == kb.idioma_base():
-        confirmados = kb.fatos("confirmado")
-        for k in kws:
-            if k.lower() in base or k.lower() in fora:
-                continue
-            evid = [f.id for f in confirmados if contem_termo(f.texto, k)]
-            for e in kb.experiencias():
-                if contem_termo(" ".join(str(e.meta.get(c, "")) for c in ("cargo", "empresa")), k):
-                    evid += [f.id for f in confirmados if f.slug == e.slug]
-            if evid:
-                base[k.lower()] = list(dict.fromkeys(evid))
+    base = palavras_sustentadas(kb, analise, rejeitados)
     acertos, ausentes, sem_base, sem_base_usadas = [], [], [], []
     for k in kws:
         evid = base.get(k.lower())
@@ -179,10 +191,15 @@ def calcular(analise: dict, markdown: str, rastro: list[dict], kb: KB, cfg: dict
     # ("Google Sheets" a um fato sobre Excel). Sugerir esse termo seria sugerir inventar, então ele vai para "parecidas".
     texto_por_id = {f.id: f.texto for f in kb.fatos("confirmado")}
     comparavel = analise.get("idioma_vaga") == kb.idioma_base()
+    # Se o fiscal já julgou os termos na análise, o que sobrou em `base` foi aceito por ele: não há "parecida".
+    julgada = "palavras_julgadas" in analise
+
+    def dito_pela_base(k: str) -> bool:
+        palavras = palavras_da_base([texto_por_id[i] for i in base[k.lower()] if i in texto_por_id])
+        return not comparavel or julgada or termo_suportado(k, palavras, estrito=True)
     iguais, parecidas = [], []
     for k in ausentes:
-        palavras = palavras_da_base([texto_por_id[i] for i in base[k.lower()] if i in texto_por_id])
-        (iguais if not comparavel or termo_suportado(k, palavras, estrito=True) else parecidas).append(k)
+        (iguais if dito_pela_base(k) else parecidas).append(k)
     comp: dict[str, dict] = {}
     if kws:
         comp["palavras"] = {"fracao": len(acertos) / len(kws), "resumo": f"{len(acertos)} de {len(kws)}",
@@ -222,7 +239,9 @@ def calcular(analise: dict, markdown: str, rastro: list[dict], kb: KB, cfg: dict
     teto = 0.0
     for k, c in comp.items():
         if k == "palavras":
-            f = (len(acertos) + len(iguais)) / len(kws)   # "parecidas" não contam: não são o que a base diz
+            # Só depende do histórico e da análise, nunca do texto gerado: o máximo não pode mudar de uma geração
+            # para outra. "Parecidas" não contam: não são o que a base diz.
+            f = sum(1 for k in kws if base.get(k.lower()) and dito_pela_base(k)) / len(kws)
         elif k in ("obrigatorios", "desejaveis"):
             itens = [r for r in reqs if r["tipo"] == ("obrigatorio" if k == "obrigatorios" else "desejavel")]
             f = sum({"coberto": 1.0, "parcial": 0.5}.get(r["status"], 0.0) * bool(r["evidencias"]) for r in itens) / len(itens)

@@ -333,7 +333,10 @@ class TestApp(unittest.TestCase):
 
     def test_gerar_salva_sozinho_na_pasta_da_empresa_e_mostra_aderencia(self):
         llm = self.gerar_para_a_vaga()
-        self.assertEqual(len(llm.chamadas), 5)       # análise, geração, fiscal e a segunda tentativa
+        rotulos = [c["rotulo"] for c in llm.chamadas]
+        self.assertEqual(rotulos[0], "analisador")
+        self.assertGreaterEqual(rotulos.count("gerador"), 2)            # geração e ao menos uma correção
+        self.assertLessEqual(rotulos.count("gerador"), 3)               # nunca mais que duas correções
         pasta = self.tmp / "saidas" / f"Empresa Fictícia_{date.today():%Y-%m}"
         self.assertTrue(pasta.is_dir())
         for nome in ("Curriculo_Mariana_Exemplo.pdf", "Curriculo_Mariana_Exemplo.docx", "Curriculo_Mariana_Exemplo.md",

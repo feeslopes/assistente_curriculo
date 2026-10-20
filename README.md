@@ -293,12 +293,13 @@ flowchart LR
   end
   subgraph Fluxos["Fluxos de negócio"]
     interview["interview.py: entrevista, extração, duplicatas"]
-    tailor["tailor.py: análise, geração, segunda tentativa, fiscal, currículo geral"]
+    tailor["tailor.py: análise, geração, correções, fiscal, currículo geral"]
   end
   subgraph Regras["Regras que o código impõe"]
     render["render.py: monta o Markdown e aplica as travas"]
     verify["verify.py: números, siglas, termos e cobertura"]
     aderencia["aderencia.py: índice antes e depois, o que melhorar"]
+    plano["plano.py: quais fatos entram e onde vai cada palavra-chave"]
   end
   subgraph Dados["Arquivos"]
     kb["kb.py: base em Markdown, ids dos fatos"]
@@ -328,6 +329,7 @@ flowchart LR
   interview --> kb
   tailor --> llm
   tailor --> render
+  tailor --> plano
   tailor --> aderencia
   aderencia --> render
   aderencia --> verify
@@ -481,18 +483,20 @@ sequenceDiagram
   end
   UI->>L: gerar
   L->>K: Fatos confirmados com ids, mais empresa, cargo e datas
-  L->>IA: Instruções do gerador, guidelines, limites, vaga, análise e fatos
+  L->>L: Plano de conteúdo (só código): quais fatos entram em cada experiência e onde vai cada palavra-chave
+  L->>IA: Instruções do gerador, guidelines, limites, plano, vaga, análise e fatos
   IA-->>L: Currículo em JSON, com os ids dos fatos em cada item
   L->>R: Primeira montagem
   R->>R: Valida fontes, números, idioma, título e limites. Empresa, cargo e datas vêm da base
-  L->>IA: Fiscal: cada item, os fatos que o sustentam e os termos duvidosos da análise
-  IA-->>L: Veredito por item e por termo
+  L->>IA: Fiscal: cada item e os fatos que o sustentam
+  IA-->>L: Veredito por item
   L->>R: Segunda montagem, aplicando o veredito
   R->>R: Índice antes e depois (frases e termos rejeitados não contam)
-  opt A versão adaptada pontuou abaixo da sem adaptar
-    L->>IA: Segunda tentativa, com o que ficou de fora
+  opt Passou de página, ficou abaixo da sem adaptar, ou faltou item do plano (até 2 vezes)
+    L->>L: Se passou de página, tira os bullets que valem menos para a vaga, na medida do excesso
+    L->>IA: Correção com a lista exata do que resolver
     IA-->>L: Nova versão, verificada do mesmo jeito
-    L->>L: Fica a melhor das duas
+    L->>L: Fica a melhor (a que cabe e, depois, a de maior nota)
   end
   L-->>UI: Resultado, índice e alertas
   UI->>S: Guarda sozinho em Empresa_AAAA-MM
@@ -638,11 +642,12 @@ saidas/
 | Termo de competência tem respaldo | Código no mesmo idioma da base, **IA fiscal** quando o currículo é traduzido ou o termo é um sinônimo |
 | Frase não exagera o que o fato diz | **IA fiscal** (só alerta, a decisão é sua) |
 | O índice não sobe por inventar | Código (`aderencia.py`), usando o veredito da IA fiscal |
-| A versão adaptada não fica abaixo da sem adaptar | Código (`tailor.py`): segunda tentativa e aviso |
+| A versão adaptada não fica abaixo da sem adaptar | Código (`tailor.py`): correção e aviso |
+| A nota não oscila por acaso | Código (`plano.py`): plano de conteúdo, conferência e correção; termos duvidosos julgados uma vez na análise |
 | Tradução fiel de cargos e nomes | **IA sugere, você confirma** |
 | Situação da candidatura | **Você marca**; o código só sugere "Sem retorno" |
 
-A IA fiscal é uma segunda chamada ao modelo. Ela dá um **veredito para cada item** (`ok`, `exagero` ou `sem_respaldo`), confere o resumo e os nomes de grupo de competências, e julga os termos que a análise ligou a fatos com outras palavras ("treinou 15 operadores" não é "gestão de equipes"). O código ainda descarta qualquer apontamento que diga no próprio texto que o item está fiel. Ela reduz o risco, mas **não é prova**: nos testes ela ainda deixou passar exageros leves de vez em quando.
+A IA fiscal é uma segunda chamada ao modelo. Ela dá um **veredito para cada item** (`ok`, `exagero` ou `sem_respaldo`), confere o resumo e os nomes de grupo de competências, e, logo depois da análise, julga os termos que a análise ligou a fatos com outras palavras ("treinou 15 operadores" não é "gestão de equipes"). O código ainda descarta qualquer apontamento que diga no próprio texto que o item está fiel. Ela reduz o risco, mas **não é prova**: nos testes ela ainda deixou passar exageros leves de vez em quando.
 
 ---
 
@@ -747,7 +752,9 @@ Decisões que o briefing original não cobria, tomadas durante o desenvolvimento
 - **Histórico em arquivos.** `indice.json` ao lado de cada currículo salvo; a área Minhas candidaturas lê a pasta `saidas/`, uma pasta `Empresa_AAAA-MM` por candidatura, gravada sozinha a cada geração. Currículos salvos antes deste recurso aparecem sem índice.
 - **Interface guiada.** Primeiro uso começa pelo currículo existente; depois, o Início (o que fazer agora) e as áreas Novo currículo, Minhas candidaturas e Meu histórico. Conferências em cartões, com tudo à vista, e um botão só para salvar: desmarcado fica guardado *a confirmar*. A vaga em três passos, só o atual aberto.
 - **A versão adaptada não pode ficar abaixo da original.** A pontuação do currículo sem adaptar aparece antes de gerar. Se a versão adaptada pontuar menos, o gerador recebe uma segunda chance com a lista do que deixou de fora, e fica a melhor das duas. Se mesmo assim ficar abaixo, a tela avisa e oferece **Usar a versão sem adaptar**. O "original" é o currículo montado com o histórico confirmado, não o arquivo enviado: só ele tem a ligação de cada frase com uma informação confirmada, e sem isso a comparação não seria justa.
-- **Termos duvidosos passam pelo fiscal.** Palavra-chave que a análise deu como comprovada, mas que as informações citadas não dizem com as mesmas palavras ("treinou 15 operadores" e "gestão de equipes"), é julgada pelo fiscal por IA na mesma chamada. Se ele não confirma, o termo não conta no índice nem fica nas competências. Termo que está escrito no histórico conta mesmo se a análise esquecer dele.
+- **Termos duvidosos são julgados uma vez, na análise.** Palavra-chave que a análise deu como comprovada, mas que as informações citadas não dizem com as mesmas palavras ("treinou 15 operadores" e "gestão de equipes"), vai ao fiscal por IA junto com as informações que a sustentariam, logo depois da análise. Se ele não confirma, o termo aparece em amarelo no encaixe ("parecido, mas não explícito") e não conta no índice nem entra no currículo. Antes isso era decidido a cada geração, e a resposta podia mudar de uma vez para outra. Termo que está escrito no histórico conta mesmo se a análise esquecer dele.
+- **Uma regra só para "você tem esta palavra".** O encaixe, os selos depois de gerar, o relatório e o índice usam a mesma função (`aderencia.palavras_sustentadas`). Antes o relatório e os selos usavam uma busca literal, e uma palavra aceita como sinônimo no encaixe podia aparecer como "ficou de fora por falta de base" depois de gerar.
+- **Plano de conteúdo antes de gerar.** O código escolhe, em cada experiência, os fatos que mais somam peso no índice ainda não coberto, até o limite de bullets, e diz onde cada palavra-chave deve entrar. A IA continua escrevendo o texto, mas com essa lista. Mesmo histórico, mesma análise e mesmos limites dão o mesmo plano. Depois de gerar, o código confere o plano e pede uma correção (no máximo duas, contando as de tamanho) se faltar o equivalente a 2 ou mais palavras-chave. O gerador roda com temperatura 0.
 - **Acompanhamento de candidaturas com um clique e sem automação.** A situação é marcada pela pessoa; o aplicativo só sugere "Sem retorno" depois de 21 dias (`config.yaml`, bloco `candidaturas`). Nada de integração com e-mail ou LinkedIn: exigiria login, servidor e dados de terceiros, e o aplicativo roda só no computador dela.
 - **Taxas só com dados suficientes.** Taxa de resposta a partir de 5 candidaturas enviadas; relação entre aderência e resultado a partir de 20, rotulada como indício. Com menos, os números mudam demais a cada resposta e pareceriam conclusão.
 - **Currículo geral com foco opcional.** Sem nenhum alvo, um currículo tende a não servir para nada; o foco (ou o objetivo do histórico) orienta o que vem primeiro. Não tem índice de aderência, porque não há vaga.
