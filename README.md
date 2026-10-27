@@ -771,3 +771,7 @@ Decisões que o briefing original não cobria, tomadas durante o desenvolvimento
 ## Licença
 
 [MIT](LICENSE). Você pode usar, copiar e modificar o código, mantendo o aviso de copyright. O software é entregue como está, sem garantia: **o currículo gerado é responsabilidade de quem o envia**, e a IA pode errar mesmo com as travas do aplicativo.
+
+## Versão hospedada (planos pagos)
+
+Há também um modo servidor, com login por link, planos semanal e mensal, landing page e métricas de uso sem dados pessoais. Veja `docs/MVP_HOSPEDADO.md` (como funciona e como subir no VPS), `docs/SEGURANCA.md`, `docs/DESCOBERTA_DE_PRECO.md` e a planilha `docs/economics_assistente_curriculo.xlsx`. Para medir qualidade e custo ao mudar modelo ou prompt: `python -m evals.rodar` e `python -m evals.comparar`.

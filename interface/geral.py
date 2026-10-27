@@ -47,8 +47,9 @@ def tela(kb: KB, cfg: dict) -> None:
                                placeholder="Deixe vazio para usar um cargo do seu histórico")
     vaga.secao_traducao(kb, idioma)
     if st.button("Gerar currículo geral", key="btn_gerar_geral", type="primary", icon=":material/auto_awesome:"):
-        r = comum.executar("Escrevendo e conferindo o currículo. Isso leva cerca de um minuto...", lambda: tailor.gerar_geral(
-            comum.obter_llm(kb), kb, idioma, cfg, foco, titulo or None))
+        r = comum.executar("Escrevendo e conferindo o currículo. Isso leva cerca de um minuto...",
+                           lambda: comum.gerar_com_cota(f"geral|{idioma}|{foco}", lambda: tailor.gerar_geral(
+                               comum.obter_llm(kb), kb, idioma, cfg, foco, titulo or None)))
         if r is not comum.FALHOU:
             res, analise, texto = r
             st.session_state.update(resultado_geral=res, geral_analise=analise, geral_texto=texto, _vista_res="curriculo")

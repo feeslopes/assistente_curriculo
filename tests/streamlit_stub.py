@@ -54,7 +54,7 @@ class FakeStreamlit:
     def __getattr__(self, nome):
         if nome in {"set_page_config", "title", "header", "subheader", "markdown", "write", "caption", "info",
                     "warning", "error", "success", "divider", "code", "json", "metric", "table", "dataframe", "text",
-                    "bar_chart", "altair_chart", "badge"}:
+                    "bar_chart", "altair_chart", "badge", "link_button"}:
             return self._mudo(nome)
         raise AttributeError(f"stub do streamlit não conhece st.{nome}")
 

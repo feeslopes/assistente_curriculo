@@ -14,22 +14,26 @@ from __future__ import annotations
 import streamlit as st
 
 from interface import comum, estilo, inicio, painel, perfil, vaga, vagas
-from src import atualizador, config, exemplo
+from src import atualizador, config, exemplo, hospedado
 from src.kb import KB
 
 
 def configuracoes(kb: KB, cfg_provedor, config_erro: str | None) -> None:
     with st.popover("", icon=":material/settings:", help="Configurações"):
         st.markdown("**Configurações**")
-        if cfg_provedor:
+        if cfg_provedor and not config.modo_hospedado():
             st.caption(f"IA: {cfg_provedor.nome_provedor} · modelo {cfg_provedor.modelo}")
             if st.button("Testar a conexão com a IA", key="btn_testar"):
                 r = comum.executar("Testando...", lambda: comum.obter_llm(kb).conversar(
                     [{"role": "user", "content": "Responda somente com a palavra OK."}], temperatura=0))
                 if r is not comum.FALHOU:
                     st.success("Funcionando.")
-        else:
+        elif not config.modo_hospedado():
             st.warning(config_erro)
+        if config.modo_hospedado():
+            comum.mostrar_uso()
+            st.link_button("Sair", "/sair", help="Encerra a sessão neste navegador")
+            return
         st.caption(f"Versão instalada: {atualizador.versao_local(config.RAIZ)}. Versões novas são instaladas "
                    "sozinhas ao abrir pelo iniciar.")
         st.caption(f"Seu histórico: {kb.base}")
@@ -51,10 +55,22 @@ def aviso_revisao_pendente() -> None:
             st.rerun()
 
 
+def sem_acesso() -> None:
+    """Modo hospedado sem identidade válida: nada do app é desenhado e nenhuma pasta é aberta."""
+    st.markdown("### Sua sessão não foi encontrada")
+    st.write("Entre pelo login para usar o aplicativo.")
+    st.link_button("Ir para o login", "/login")
+
+
 def main() -> None:
     cfg_provedor, config_erro = comum.configuracao_do_provedor()
     st.set_page_config(page_title="Currículo sob medida", page_icon=":material/description:", layout="wide",
                        initial_sidebar_state="collapsed")
+    if config.modo_hospedado():
+        hospedado.instalar(lambda: st.context.headers)
+        if not comum.usuario():
+            sem_acesso()
+            return
     comum.estado_inicial()
     estilo.aplicar_css()
     kb = KB(config.base_dir())

@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import os
 import subprocess
+import time
 import sys
 from pathlib import Path
 
 import streamlit as st
 
-from src import atualizador, config, registro, sessao
+from src import atualizador, config, cota, hospedado, registro, sessao
 from src.kb import KB, ErroBase
 from src.llm import LLM, Configuracao, ErroConfig, ErroLLM
 
@@ -48,7 +49,7 @@ def estado_inicial() -> None:
                 partes.append("o que ainda estava para você conferir")
             st.session_state["msg"] = ("info", "Continuei de onde você parou: recuperei " + " e ".join(partes) + ".")
         # Atualização instalada pelo `iniciar` desde a última vez: avisa uma vez, com as notas da versão.
-        aviso = atualizador.aviso_pendente(config.RAIZ)
+        aviso = None if config.modo_hospedado() else atualizador.aviso_pendente(config.RAIZ)
         if aviso:
             notas = aviso.get("notas", "").strip()
             texto = (f"O aplicativo foi atualizado para a versão **{aviso['para']}**. O seu histórico e os seus currículos "
@@ -103,11 +104,78 @@ def configuracao_do_provedor():
         return None, str(e)
 
 
+def usuario() -> dict | None:
+    """Identidade assinada desta requisição (modo hospedado) ou None. No app local não existe usuário."""
+    if not config.modo_hospedado():
+        return None
+    try:
+        return hospedado.reivindicacao(st.context.headers)
+    except Exception:  # noqa: BLE001 - sem contexto de requisição: sem identidade
+        return None
+
+
+def _medir_uso(claim: dict | None):
+    """Callback do LLM: grava no servidor só tokens, custo e duração de cada chamada (nunca texto)."""
+    if not claim:
+        return None
+
+    def registrar(info: dict) -> None:
+        u = info["uso"]
+        hospedado.evento(claim, "ia_chamada", etapa=info["rotulo"] or "sem_rotulo", modelo=info["modelo"],
+                         entrada=u["entrada"], cache_hit=u["cache_hit"], saida=u["saida"],
+                         custo_usd=round(info["custo_usd"] or 0, 6), duracao_s=info["duracao_s"],
+                         erro=bool(info["erro"]))
+    return registrar
+
+
 def obter_llm(kb: KB) -> LLM:
     cfg, erro = configuracao_do_provedor()
     if erro:
         raise ErroConfig(erro)
-    return LLM(cfg, segredos=kb.segredos(), log_dir=config.logs_dir() if registro.ativo() else None)
+    hospedado_ = config.modo_hospedado()
+    claim = usuario()
+    # No servidor o registro guarda só metadados e fica na pasta do próprio usuário; no app local, como sempre.
+    return LLM(cfg, segredos=kb.segredos(), log_dir=config.logs_dir() if (registro.ativo() or hospedado_) else None,
+               modelos_por_etapa=config.modelos_por_etapa(), guardar_conteudo=not hospedado_,
+               ao_usar=_medir_uso(claim))
+
+
+def gerar_com_cota(chave_vaga: str, gerar):
+    """Roda uma geração respeitando o plano (só no servidor). A geração só entra na conta se der certo.
+
+    `chave_vaga` identifica a vaga (o texto dela, ou uma chave do currículo geral): regerar a mesma vaga tem limite.
+    """
+    claim = usuario()
+    if not config.modo_hospedado():
+        return gerar()
+    if not claim:
+        raise cota.ErroCota("Sua sessão expirou. Entre de novo pelo login.")
+    c = hospedado.cota_do(claim)
+    c.autorizar(chave_vaga)
+    inicio = time.time()
+    try:
+        resultado = gerar()
+    except Exception:
+        hospedado.evento(claim, "geracao_falha")
+        raise
+    c.registrar(chave_vaga)
+    hospedado.evento(claim, "geracao_ok", duracao_s=round(time.time() - inicio, 1),
+                     usadas=c.situacao()["usadas"], plano=claim.get("plano") or "")
+    return resultado
+
+
+def mostrar_uso() -> None:
+    """Quanto do plano já foi usado (só no servidor)."""
+    claim = usuario()
+    if not claim:
+        return
+    try:
+        s = hospedado.cota_do(claim).situacao()
+    except Exception:  # noqa: BLE001
+        return
+    st.caption(f"Plano {s['plano']}: {s['usadas']} de {s['teto']} gerações usadas neste período.")
+    if s["aviso"] and s["restantes"] > 0:
+        st.warning(f"Restam {s['restantes']} gerações até o fim do período.", icon=":material/hourglass_bottom:")
 
 
 def executar(rotulo: str, funcao, *args):
@@ -136,6 +204,8 @@ def avisar(tipo: str, texto: str) -> None:
 
 def abrir_pasta(pasta: Path) -> bool:
     """Abre a pasta no explorador de arquivos. O app roda no computador dela, então isso funciona."""
+    if config.modo_hospedado():
+        return False      # no servidor não há explorador de arquivos do usuário, e o caminho não deve aparecer
     try:
         if sys.platform.startswith("win"):
             os.startfile(str(pasta))  # noqa: S606 - pasta local do próprio aplicativo
@@ -150,6 +220,9 @@ def abrir_pasta(pasta: Path) -> bool:
 
 def tela_sem_ia(erro: str) -> None:
     """Falta a chave da IA. Explica em linguagem simples, sem travar o resto do app."""
+    if config.modo_hospedado():       # a chave é do servidor: o usuário não tem o que configurar
+        st.error("O serviço está temporariamente indisponível. Tente de novo em alguns minutos.")
+        return
     with st.container(border=True):
         st.markdown("#### :material/key: Falta ligar a IA")
         st.markdown(
@@ -159,3 +232,9 @@ def tela_sem_ia(erro: str) -> None:
             "2. Cole a chave logo depois de `DEEPSEEK_API_KEY=`, sem espaços e sem aspas.\n"
             "3. Salve, feche esta janela e abra o aplicativo de novo.")
         st.caption(f"Detalhe técnico: {erro}")
+
+
+def evento(nome: str, **dados) -> None:
+    """Métrica de uso sem conteúdo (só no servidor): contagens e rótulos curtos. Nunca texto de currículo ou vaga."""
+    if config.modo_hospedado():
+        hospedado.evento(usuario(), nome, **dados)

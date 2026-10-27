@@ -1,0 +1,18 @@
+Senior Data-Driven Growth Marketer
+
+Example Corp needs a senior growth marketer with strong analytical and engineering skills.
+
+What you will do
+- Lead paid acquisition across Google Ads, Meta Ads and LinkedIn Ads
+- Build predictive attribution models in Python
+- Create executive dashboards in Tableau and Looker Studio
+- Manage a team of 5 marketers and a budget above 1M per month
+
+What we require
+- 6+ years of experience in growth or performance marketing
+- Hands-on Python and SQL
+- Experience with Salesforce Marketing Cloud
+- Fluent English
+
+Nice to have
+- Master's degree in a quantitative field

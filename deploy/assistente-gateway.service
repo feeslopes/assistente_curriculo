@@ -1,0 +1,26 @@
+[Unit]
+Description=Assistente Curriculo - servidor de acesso (landing, login, termos)
+After=network.target
+
+[Service]
+User=assistente
+Group=assistente
+WorkingDirectory=/opt/assistente
+EnvironmentFile=/etc/assistente.env
+Environment=CV_MODO=hospedado
+ExecStart=/opt/assistente/.venv/bin/uvicorn --factory servidor.gateway:app_do_ambiente --host 127.0.0.1 --port 8081 --no-server-header
+Restart=on-failure
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/assistente
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target

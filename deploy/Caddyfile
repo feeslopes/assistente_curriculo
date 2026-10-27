@@ -1,0 +1,38 @@
+# Proxy reverso do Assistente Currículo. Troque app.seudominio.com.br pelo seu domínio.
+# O Caddy obtém e renova o certificado HTTPS sozinho. Portas abertas no firewall: só 22 (SSH por chave), 80 e 443.
+#
+#   servidor de acesso (landing, login, termos): 127.0.0.1:8081
+#   Streamlit (o app, atrás do login):           127.0.0.1:8501, com baseUrlPath=app
+
+app.seudominio.com.br {
+	encode zstd gzip
+
+	header {
+		-Server
+		X-Content-Type-Options nosniff
+		Referrer-Policy same-origin
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	}
+
+	# Parte pública: landing, login, link do e-mail, termos, saída, cliques do WhatsApp e arquivos estáticos.
+	@publico path / /login /entrar /termos /sair /privacidade /static/* /go/*
+	handle @publico {
+		reverse_proxy 127.0.0.1:8081
+	}
+
+	# O app. Antes de chegar ao Streamlit, o servidor de acesso confere a sessão (e devolve a identidade assinada).
+	handle /app /app/* {
+		# Descarta qualquer identidade que o cliente tenha tentado enviar. O app ainda confere a assinatura.
+		request_header -X-CV-Sessao
+		forward_auth 127.0.0.1:8081 {
+			uri /auth/verificar
+			copy_headers X-CV-Sessao
+		}
+		reverse_proxy 127.0.0.1:8501
+	}
+
+	# Tudo o resto não existe. Em especial, /auth/* nunca é exposto ao público.
+	handle {
+		respond "Não encontrado" 404
+	}
+}

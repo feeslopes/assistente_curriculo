@@ -72,3 +72,20 @@ candidaturas:
   dias_sem_retorno: 21      # depois disso, o app SUGERE marcar "Sem retorno" (nunca muda sozinho)
   minimo_para_taxas: 5      # candidaturas enviadas antes de mostrar a taxa de resposta
   minimo_para_relacao: 20   # antes disso, comparar aderência e resultado seria ruído
+
+# Modelo por etapa (rótulo da chamada). Etapa que não aparece aqui usa MODELO do .env (ou o padrão do provedor).
+# Só vale para o DeepSeek. Flash nas etapas de leitura e conferência custa cerca de 3 vezes menos que o Pro.
+# Hipótese a validar com `python -m evals.rodar` antes de adotar: as notas de análise, termos e verificação não podem piorar.
+# Para voltar tudo ao modelo padrão, deixe a lista vazia: modelos_por_etapa: {}
+modelos_por_etapa: {}
+#  analisador: deepseek-flash
+#  verificador: deepseek-flash
+#  tradutor_cargos: deepseek-flash
+
+# Plano e limites de uso do servidor (só valem no modo hospedado; o app local não tem teto).
+planos:
+  mensal:  {dias: 30, geracoes: 60, aviso_em: 50}
+  semanal: {dias: 7, geracoes: 15, aviso_em: 12}
+limites_uso:
+  regeracoes_por_vaga: 3        # além da primeira geração da vaga
+  geracoes_por_hora: 10

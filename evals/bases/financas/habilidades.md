@@ -1,0 +1,4 @@
+- [confirmado] Usa Excel avançado (tabelas dinâmicas, PROCV, macros simples) para consolidar relatórios financeiros.
+- [confirmado] Elabora fluxo de caixa projetado e acompanha o orçamento anual por centro de custo.
+- [confirmado] Concilia contas a pagar e a receber no ERP TOTVS.
+- [confirmado] Prepara apresentações de resultados para a diretoria em PowerPoint.

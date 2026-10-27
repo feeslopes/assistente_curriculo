@@ -200,21 +200,48 @@ def palpite_nome(texto: str) -> str:
 
 # ------------------------------------------------------------ leitura de arquivos
 
+MAX_BYTES_ARQUIVO = 8 * 1024 * 1024
+MAX_PAGINAS_PDF = 60
+MAX_DOCX_DESCOMPRIMIDO = 40 * 1024 * 1024    # um .docx é um zip: limita o tamanho depois de aberto (zip bomb)
+
+
+class ErroArquivo(ValueError):
+    """Arquivo grande demais, corrompido ou ilegível. A mensagem já está em português e pode ir para a tela."""
+
+
 def ler_arquivo(nome: str, dados: bytes) -> str:
-    """Texto de PDF, DOCX, MD ou TXT enviado pelo usuário."""
+    """Texto de PDF, DOCX, MD ou TXT enviado pelo usuário. Levanta ErroArquivo se o arquivo não presta."""
+    if len(dados) > MAX_BYTES_ARQUIVO:
+        raise ErroArquivo(f"O arquivo passa de {MAX_BYTES_ARQUIVO // (1024 * 1024)} MB. Envie uma versão menor ou cole o texto.")
     ext = nome.lower().rsplit(".", 1)[-1] if "." in nome else ""
     if ext == "pdf":
-        from pypdf import PdfReader
-        leitor = PdfReader(io.BytesIO(dados))
-        return "\n".join((p.extract_text() or "") for p in leitor.pages).strip()
+        try:
+            from pypdf import PdfReader
+            leitor = PdfReader(io.BytesIO(dados))
+            if len(leitor.pages) > MAX_PAGINAS_PDF:
+                raise ErroArquivo(f"O PDF tem mais de {MAX_PAGINAS_PDF} páginas. Envie só o currículo ou cole o texto.")
+            return "\n".join((p.extract_text() or "") for p in leitor.pages).strip()
+        except ErroArquivo:
+            raise
+        except Exception:  # noqa: BLE001 - PDF corrompido ou protegido: mensagem simples, sem detalhe técnico
+            raise ErroArquivo("Não consegui abrir este PDF. Ele pode estar corrompido ou protegido por senha.") from None
     if ext == "docx":
-        from docx import Document
-        doc = Document(io.BytesIO(dados))
-        partes = [p.text for p in doc.paragraphs]
-        for tabela in doc.tables:
-            for linha in tabela.rows:
-                partes.append(" | ".join(c.text for c in linha.cells))
-        return "\n".join(partes).strip()
+        try:
+            import zipfile
+            with zipfile.ZipFile(io.BytesIO(dados)) as z:
+                if sum(i.file_size for i in z.infolist()) > MAX_DOCX_DESCOMPRIMIDO:
+                    raise ErroArquivo("Este arquivo Word é grande demais depois de aberto. Cole o texto no lugar.")
+            from docx import Document
+            doc = Document(io.BytesIO(dados))
+            partes = [p.text for p in doc.paragraphs]
+            for tabela in doc.tables:
+                for linha in tabela.rows:
+                    partes.append(" | ".join(c.text for c in linha.cells))
+            return "\n".join(partes).strip()
+        except ErroArquivo:
+            raise
+        except Exception:  # noqa: BLE001
+            raise ErroArquivo("Não consegui abrir este arquivo Word. Ele pode estar corrompido.") from None
     for enc in ("utf-8-sig", "cp1252"):
         try:
             return dados.decode(enc).strip()

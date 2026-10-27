@@ -1,0 +1,1 @@
+- [confirmado] Curso de Excel para Finanças | Instituto Exemplo | 2019

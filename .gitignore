@@ -32,3 +32,13 @@ backups/
 .manifesto
 .atualizacao.json
 *.novo
+
+# Dados do modo hospedado (usuários, banco de acesso, cota). Nunca versionar.
+dados/
+dados_dev/
+*.db
+*.db-wal
+*.db-shm
+
+# Resultados dos evals (currículos gerados em rodadas de teste)
+evals/resultados/

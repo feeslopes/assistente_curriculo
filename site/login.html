@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Entrar | $produto</title>
+<link rel="stylesheet" href="/static/estilo.css">
+</head>
+<body class="centro">
+<header class="wrap topo">
+  <a class="marca" href="/"><i></i>$produto</a>
+</header>
+<main>
+  <div class="caixa">
+    <h1>Entrar</h1>
+    <p>Digite o e-mail do seu acesso. Enviamos um link para entrar, sem senha.</p>
+    <div role="status" aria-live="polite">$mensagem_html</div>
+    <form method="post" action="/login">
+      <label for="email">E-mail</label>
+      <input id="email" name="email" type="email" autocomplete="email" inputmode="email" required maxlength="254" autofocus>
+      <button class="btn primario cheio" type="submit">Receber link de acesso</button>
+    </form>
+    <div class="rodape-caixa">Ainda não tem acesso? <a href="/go/mensal">Fale no WhatsApp</a></div>
+  </div>
+</main>
+</body>
+</html>

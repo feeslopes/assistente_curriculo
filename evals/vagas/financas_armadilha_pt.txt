@@ -1,0 +1,19 @@
+Analista de Planejamento Financeiro e M&A Sênior
+
+Buscamos pessoa sênior para liderar modelagem financeira e apoio a operações de fusões e aquisições.
+
+Responsabilidades
+- Construir modelos de valuation (DCF e múltiplos) para operações de M&A
+- Gerenciar uma equipe de 4 analistas
+- Automatizar relatórios com Python e SQL avançado
+- Reportar ao CFO e ao conselho
+
+Requisitos obrigatórios
+- 7 anos ou mais de experiência em finanças corporativas ou banco de investimento
+- Certificação CFA nível II ou superior
+- Experiência comprovada com M&A e valuation
+- Inglês fluente
+- Domínio de SAP e Power BI
+
+Diferenciais
+- MBA em finanças

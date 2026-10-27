@@ -1,0 +1,2 @@
+- [confirmado] Português: Nativo
+- [confirmado] Inglês: Intermediário

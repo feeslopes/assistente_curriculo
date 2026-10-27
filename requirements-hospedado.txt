@@ -1,0 +1,4 @@
+# Dependências extras do modo hospedado (além de requirements.txt).
+# Versões já presentes no ambiente de desenvolvimento; fixe-as no servidor depois do primeiro deploy (pip freeze).
+starlette>=0.40
+uvicorn>=0.30

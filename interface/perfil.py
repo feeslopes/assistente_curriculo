@@ -309,13 +309,15 @@ def conversa(kb: KB, config_erro: str | None) -> None:
             comum.obter_llm(kb), kb, st.session_state["chat"], texto, textos_aguardando_revisao()))
         if resposta is not comum.FALHOU:
             st.session_state["chat"] += [{"role": "user", "content": texto}, {"role": "assistant", "content": resposta}]
+            comum.evento("entrevista_turno", turno=sum(1 for m in st.session_state["chat"] if m["role"] == "user"))
             st.rerun()
 
 
 # ------------------------------------------------------------------ dados pessoais e avançado
 
 def dados_pessoais(kb: KB) -> None:
-    st.caption(":material/lock: Ficam só neste computador. Entram no topo do currículo e nunca são enviados à IA.")
+    st.caption((":material/lock: Ficam guardados na sua conta. Entram no topo do currículo e nunca são enviados à IA."
+                if config.modo_hospedado() else ":material/lock: Ficam só neste computador. Entram no topo do currículo e nunca são enviados à IA."))
     with st.form(f"form_contato_{st.session_state['base_v']}"):
         valores = revisao.campos_contato(kb, f"ct_{st.session_state['base_v']}")
         if st.form_submit_button("Salvar", type="primary", icon=":material/check:"):
@@ -344,6 +346,8 @@ def avancado(kb: KB) -> None:
             st.session_state["base_v"] += 1
             comum.avisar("success", f"Arquivo '{slug}' salvo.")
             st.rerun()
+    if config.modo_hospedado():     # no servidor o registro não guarda texto e não é do usuário
+        return
     st.markdown("#### Registro das conversas com a IA")
     if not registro.ativo():
         st.caption("O registro está desligado (CV_LOG=0 no arquivo .env).")
