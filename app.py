@@ -67,10 +67,18 @@ def main() -> None:
     st.set_page_config(page_title="Currículo sob medida", page_icon=":material/description:", layout="wide",
                        initial_sidebar_state="collapsed")
     if config.modo_hospedado():
+        try:
+            dev = hospedado.dev_usuario()
+        except hospedado.ErroDev as e:
+            st.error(str(e))
+            return
         hospedado.instalar(lambda: st.context.headers)
         if not comum.usuario():
             sem_acesso()
             return
+        if dev:
+            st.warning(f"Modo de desenvolvimento: sem login, usando o usuário de teste {dev}. Nunca use isto em produção.",
+                       icon=":material/warning:")
     comum.estado_inicial()
     estilo.aplicar_css()
     kb = KB(config.base_dir())

@@ -67,13 +67,17 @@ Faça nesta ordem. Os arquivos de apoio estão em `deploy/`.
 11. **Backup.** Rotina diária e criptografada de `/var/lib/assistente`, com prazo de retenção definido e expurgo (a exclusão de um usuário precisa valer também para os backups dentro desse prazo).
 12. **Retenção.** Os termos dizem 90 dias de inatividade. Falta agendar o expurgo (cron que apaga pastas sem uso há mais de 90 dias); ver pendências.
 
-## Rodar no seu computador, só para ver
+## Rodar no seu computador
 
 ```bash
-python -m servidor.dev
+.venv\Scripts\python.exe -m servidor.dev        # landing, login e termos em http://localhost:8080
+.venv\Scripts\python.exe -m servidor.dev_app    # o app completo em modo hospedado em http://localhost:8502
 ```
 
-Sobe a landing e o login em `http://localhost:8080` com o acesso de teste `teste@exemplo.com`. O link de acesso aparece no terminal. Para ver o app completo atrás do login é preciso o Caddy; sem ele, o app local de sempre (`iniciar`) continua funcionando como antes.
+- `servidor.dev`: acesso de teste `teste@exemplo.com`. O link de acesso aparece no terminal (o e-mail não é enviado). Depois dos termos, o redirecionamento para `/app/` dá 404, porque o app fica atrás do Caddy.
+- `servidor.dev_app`: abre o app direto, sem proxy e sem login, com um usuário de teste. Opções: `--usuario outra@exemplo.com` (para ver o isolamento, rode duas vezes com e-mails diferentes), `--plano semanal`, `--teto 3` (para ver o bloqueio de uso sem gastar 60 gerações). Os dados ficam em `dados_dev/`, fora do Git. A IA é a do seu `.env`, então cada geração gasta tokens de verdade.
+- **Atalho que contorna o login.** Só funciona com `CV_ENV=dev`. Se `CV_DEV_USUARIO` aparecer em qualquer outro ambiente, o app se recusa a abrir e não cria pasta. Nunca coloque `CV_ENV=dev` nem `CV_DEV_USUARIO` no `/etc/assistente.env`.
+- O app local de sempre (`iniciar`) continua funcionando como antes.
 
 ## O que mudou no código
 

@@ -4,168 +4,138 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>$produto</title>
-<meta name="description" content="Um currículo para cada vaga, escrito só com o que você confirmou. Mostra o que a vaga pede, o que você cobre e o que falta.">
+<meta name="description" content="Um currículo para cada vaga, escrito só com o que você confirmou que fez. Mostra o que a vaga pede, o que você cobre e o que falta.">
 <link rel="stylesheet" href="/static/estilo.css">
 </head>
 <body>
 <header class="wrap topo">
-  <a class="marca" href="/"><i></i>$produto</a>
+  <a class="marca" href="/">$produto</a>
   <nav>
     <a class="link" href="#como">Como funciona</a>
     <a class="link" href="#planos">Planos</a>
     <a class="link" href="/login">Entrar</a>
-    <a class="btn primario pequeno" href="/go/mensal">Quero contratar</a>
+    <a class="btn primario pequeno" href="/go/mensal">Contratar</a>
   </nav>
 </header>
 
-<main>
-<section class="hero">
-  <div class="wrap">
-    <h1>Um currículo para cada vaga. Sem inventar nada.</h1>
-    <p class="sub">Você conta sua história uma vez. O $produto cruza com cada vaga, mostra o que falta e escreve só com o que você confirmou.</p>
+<main class="wrap">
+  <section class="hero">
+    <h1>Cada vaga pede um currículo diferente. Escrever trinta é que não dá.</h1>
+    <p class="sub">O $produto cruza a vaga com o seu histórico, mostra o que ela pede e você ainda não provou, e escreve o currículo só com o que você confirmou que fez.</p>
     <div class="acoes">
-      <a class="btn primario" href="/go/mensal">Quero contratar</a>
-      <a class="btn contorno" href="#como">Ver como funciona</a>
+      <a class="btn primario" href="/go/mensal">Contratar pelo WhatsApp</a>
+      <a class="texto" href="#exemplo">Ver um exemplo</a>
     </div>
-    <small>Contratação pelo WhatsApp. Pagamento por Pix.</small>
+    <small>Pagamento por Pix, combinado na conversa. Sem cadastro no site.</small>
 
-    <div class="janela" aria-label="Exemplo do aplicativo, com dados fictícios">
-      <div class="barra"><span></span><span></span><span></span><em>Vaga: Analista de Marketing Pleno</em></div>
-      <div class="corpo">
-        <div class="col">
-          <h3>O que a vaga pede</h3>
-          <div class="req"><span>Gestão de campanhas pagas</span><span class="chip ok">Coberto</span></div>
-          <div class="req"><span>Análise de funil e métricas</span><span class="chip ok">Coberto</span></div>
-          <div class="req"><span>Automação de marketing</span><span class="chip parcial">Parcial</span></div>
-          <div class="req"><span>Experiência com SQL</span><span class="chip lacuna">Lacuna</span></div>
-          <div class="pergunta"><b>Você já usou SQL?</b> Se sim, conte em uma ou duas frases onde e para quê. Se não, tudo bem: ele fica de fora.</div>
-        </div>
-        <div class="col cv">
-          <h3>Currículo gerado</h3>
-          <h4>Mariana Souza</h4>
-          <div class="papel">Analista de Marketing</div>
+    <div class="anotado" aria-label="Exemplo com dados fictícios">
+      <div>
+        <div class="folha">
+          <div class="cabeca">Currículo gerado para: Analista de Marketing Pleno</div>
+          <h3>Mariana Souza</h3>
+          <div class="cargo">Analista de Marketing</div>
           <ul>
-            <li>Estruturou o funil de aquisição de um produto com 12 mil usuários ativos. <span class="fonte">fato #3</span></li>
-            <li>Conduziu campanhas pagas em duas plataformas, com relatório semanal de resultados. <span class="fonte">fato #5</span></li>
-            <li>Montou a régua de e-mails de boas-vindas no RD Station. <span class="fonte">fato #7</span></li>
+            <li>Gerencia R$ 80 mil por mês em mídia paga, entre Google Ads e Meta Ads.<span class="ref">[fato 4]</span></li>
+            <li>Reduziu o custo por lead em 18% ao reorganizar as campanhas por público.<span class="ref">[fato 5]</span></li>
+            <li>Estruturou o funil de aquisição de um produto com 12 mil usuários ativos.<span class="ref">[fato 3]</span></li>
           </ul>
         </div>
+        <p class="legenda">Exemplo com dados fictícios.</p>
+      </div>
+      <div class="margem">
+        <p><b>Google Ads e custo por lead.</b> A vaga cita os dois, e os dois estão no histórico dela. Por isso subiram para o topo.</p>
+        <p><b>Automação de marketing.</b> A vaga pede, e não havia fato nenhum sobre isso. O app perguntou, a resposta foi que ela nunca usou, e a linha não entrou.</p>
+        <p><b>Cada [fato N]</b> aponta para uma linha do histórico. Linha sem origem sai do texto.</p>
       </div>
     </div>
-  </div>
-</section>
+  </section>
 
-<section id="como">
-  <div class="wrap">
-    <p class="rotulo">Como funciona</p>
-    <h2>Três passos. Um histórico seu, vários currículos.</h2>
-    <p class="lead">A entrevista é feita uma vez. Depois, cada vaga leva poucos minutos.</p>
-    <div class="passos">
-      <div class="passo"><span class="n">01</span><h3>Entrevista</h3><p>Envie seu currículo atual ou converse com o assistente. Ele pergunta o que você fez, com números, e guarda como fatos que você confirma um a um.</p></div>
-      <div class="passo"><span class="n">02</span><h3>Vaga</h3><p>Cole a descrição da vaga. O app mostra o que ela pede, o que o seu histórico já cobre e o que falta, e pergunta só o que for preciso.</p></div>
-      <div class="passo"><span class="n">03</span><h3>Currículo</h3><p>Receba o texto em PDF e DOCX, em português ou inglês, com formato simples para sistemas de triagem. Revise e edite antes de enviar.</p></div>
+  <section class="bloco" id="como">
+    <h2>Primeiro uma conversa, depois a vaga.</h2>
+    <div class="prosa">
+      <p><b>A conversa.</b> Você manda o currículo que já tem ou responde às perguntas do assistente. Ele quer saber o que você fez de fato: o tamanho do time, o número, a ferramenta. Cada resposta vira um fato que você confirma ou descarta.</p>
+      <p><b>A vaga.</b> Você cola o texto da vaga. O app mostra o que ela pede, o que o seu histórico já cobre e o que falta, e só pergunta sobre o que falta. Se você não tem a experiência, ela não aparece no currículo.</p>
+      <p><b>O currículo.</b> Sai em PDF e Word, em português ou inglês, num formato simples que os sistemas de triagem leem bem. Você edita o que quiser antes de enviar. A conversa acontece uma vez, e cada vaga nova leva poucos minutos.</p>
     </div>
-  </div>
-</section>
+  </section>
 
-<section class="alt">
-  <div class="wrap">
-    <p class="rotulo">A regra central</p>
-    <h2>Nada entra no currículo sem um fato que você confirmou.</h2>
-    <p class="lead">Ferramentas de IA tendem a exagerar para bater com a vaga. Em entrevista, isso derruba o candidato. Aqui a regra é imposta pelo código, não só pedida ao modelo.</p>
-    <div class="duas">
-      <div class="cartao"><h3>Cada linha tem origem</h3><p>Todo item do currículo aponta para um fato do seu histórico. Item sem origem é removido e aparece em um aviso, para você decidir.</p></div>
-      <div class="cartao"><h3>Lacuna vira pergunta</h3><p>Se a vaga pede algo que você não tem registrado, o app pergunta. Se você não tem a experiência, ela não aparece. Números, cargos e datas são conferidos contra a sua base.</p></div>
+  <section class="bloco">
+    <h2>Não é sobre escrever bonito. É sobre não escrever o que você não fez.</h2>
+    <div class="prosa">
+      <p>Ferramenta de IA que reescreve currículo para bater com a vaga tende a exagerar. O candidato descobre isso na entrevista, quando perguntam do número que ele nunca viu.</p>
+      <p>Aqui cada linha aponta para um fato seu, e o código confere número, cargo e ferramenta contra o seu histórico. O que não tem origem é removido e aparece num aviso, para você decidir. O modelo escreve, mas quem confere é o código.</p>
     </div>
-  </div>
-</section>
+  </section>
 
-<section>
-  <div class="wrap">
-    <p class="rotulo">Antes e depois</p>
-    <h2>A diferença entre mandar um currículo e mandar o certo.</h2>
-    <p class="lead">Exemplo com dados fictícios.</p>
-    <div class="tabela-wrap">
-      <table>
-        <thead><tr><th></th><th>Currículo único</th><th>Com o $produto</th></tr></thead>
-        <tbody>
-          <tr><td class="item">Texto</td><td>O mesmo para todas as vagas</td><td class="bom">Reordenado e reescrito para cada vaga</td></tr>
-          <tr><td class="item">Palavras da vaga</td><td>Poucas, por sorte</td><td class="bom">Usadas onde o seu histórico sustenta</td></tr>
-          <tr><td class="item">Números</td><td>Os que você lembrou na hora</td><td class="bom">Só os que estão na sua base</td></tr>
-          <tr><td class="item">Se falta experiência</td><td>Fica a dúvida, ou um exagero</td><td class="bom">Vira pergunta; se não tem, não entra</td></tr>
-          <tr><td class="item">Tempo por vaga</td><td>Reescrever à mão, a cada vez</td><td class="bom">Poucos minutos, depois da entrevista</td></tr>
-        </tbody>
-      </table>
+  <section class="bloco" id="exemplo">
+    <h2>A mesma experiência, escrita para uma vaga.</h2>
+    <div class="par">
+      <div>
+        <p class="rotulo">Currículo único</p>
+        <p class="texto">Responsável por campanhas de marketing digital e análise de resultados.</p>
+      </div>
+      <div class="depois">
+        <p class="rotulo">Para a vaga que pede Google Ads e custo por lead</p>
+        <p class="texto">Gerencia R$ 80 mil por mês em Google Ads e Meta Ads e reduziu o custo por lead em 18%.</p>
+      </div>
     </div>
-  </div>
-</section>
+    <p class="nota">Dados fictícios. Os números do segundo texto vêm do histórico da pessoa, não da vaga.</p>
+  </section>
 
-<section class="alt" id="planos">
-  <div class="wrap">
-    <p class="rotulo">Planos</p>
-    <h2>Pague só pelo período em que estiver buscando.</h2>
-    <p class="lead">Sem fidelidade. A contratação é pelo WhatsApp e o acesso é liberado no seu e-mail.</p>
+  <section class="bloco" id="planos">
+    <h2>Dois jeitos de pagar.</h2>
+    <div class="prosa"><p>Sem plano grátis e sem fidelidade. Os preços são os da primeira rodada, com as pessoas que já pediram acesso. Podem mudar.</p></div>
     <div class="planos">
       <div class="plano">
         <h3>Semanal</h3>
         <div class="preco">R$$ $preco_semanal <small>por semana</small></div>
-        <div class="limite">Até $teto_semanal currículos por semana</div>
-        <ul><li>Entrevista e histórico sem limite</li><li>PDF e DOCX, em português e inglês</li><li>Análise de cada vaga</li><li>Acompanhamento das candidaturas</li></ul>
-        <a class="btn contorno cheio" href="/go/semanal">Contratar o semanal</a>
+        <p>Até $teto_semanal currículos por semana. Para quem está na reta final de uma busca.</p>
+        <a class="btn contorno pequeno" href="/go/semanal">Contratar o semanal</a>
       </div>
-      <div class="plano destaque">
+      <div class="plano">
         <h3>Mensal</h3>
         <div class="preco">R$$ $preco_mensal <small>por mês</small></div>
-        <div class="limite">Até $teto_mensal currículos por mês</div>
-        <ul><li>Tudo do semanal</li><li>Para quem se candidata em volume</li><li>Até $regeracoes novas versões da mesma vaga</li><li>Edição manual sem limite</li></ul>
-        <a class="btn primario cheio" href="/go/mensal">Contratar o mensal</a>
+        <p>Até $teto_mensal currículos por mês. Para quem se candidata em volume.</p>
+        <a class="btn primario pequeno" href="/go/mensal">Contratar o mensal</a>
       </div>
     </div>
-    <p class="nota">Cada geração de currículo conta no limite do plano. Editar o texto à mão não conta.</p>
-  </div>
-</section>
+    <p class="nota">Cada geração conta no limite, inclusive refazer a mesma vaga (até $regeracoes vezes). Editar o texto à mão não conta.</p>
+  </section>
 
-<section>
-  <div class="wrap">
-    <p class="rotulo">Dados e segurança</p>
-    <h2>O que acontece com os seus dados.</h2>
-    <p class="lead">Você entrega seu histórico profissional. Dizemos com clareza onde ele fica.</p>
-    <ul class="lista-limpa">
-      <li><b>Onde ficam.</b> Seu histórico e seus currículos ficam em uma área separada por usuário, no nosso servidor, protegida por login.</li>
-      <li><b>O que vai para a IA.</b> O texto das gerações vai ao provedor de IA (DeepSeek), cujos servidores ficam na China. Telefone, e-mail e links são removidos antes do envio.</li>
-      <li><b>O que não fazemos.</b> Não vendemos seus dados e não usamos seu conteúdo em publicidade.</li>
-      <li><b>Controle.</b> Você pode pedir a exclusão da conta e de tudo o que foi guardado.</li>
-      <li><b>Métricas de uso.</b> Medimos contagens e tempos, sem ler o conteúdo dos seus documentos.</li>
-    </ul>
-    <p class="nota">Detalhes nos <a href="/privacidade">Termos e Privacidade</a>.</p>
-  </div>
-</section>
+  <section class="bloco">
+    <h2>Onde ficam os seus dados.</h2>
+    <div class="prosa">
+      <p>Seu histórico fica numa área separada por usuário, no nosso servidor, atrás de login. O texto de cada geração vai para o DeepSeek, e os servidores dele ficam na China. Antes de sair, o sistema remove telefone, e-mail e links. Nome de empresa, cargo e o que você escreveu seguem no texto.</p>
+      <p>Não vendemos dados, e você pode pedir a exclusão de tudo a qualquer momento. Os detalhes estão nos <a class="texto" href="/privacidade">Termos e Privacidade</a>.</p>
+    </div>
+  </section>
 
-<section class="alt">
-  <div class="wrap">
-    <p class="rotulo">Perguntas frequentes</p>
-    <h2>Antes de contratar.</h2>
-    <details><summary>Isso garante que meu currículo passa na triagem?</summary><p>Não. Ninguém garante isso. O que fazemos é usar o vocabulário da vaga onde o seu histórico sustenta, e entregar um formato simples que os sistemas leem bem. Um recrutador ainda lê o resultado.</p></details>
-    <details><summary>E se eu não tiver uma experiência que a vaga pede?</summary><p>Ela não entra. O app mostra a lacuna, pergunta se você tem algo relacionado e, se não tiver, segue sem ela.</p></details>
-    <details><summary>Preciso instalar alguma coisa?</summary><p>Não. Você acessa pelo navegador, no computador ou no celular.</p></details>
-    <details><summary>Como funciona o pagamento?</summary><p>Você fala comigo pelo WhatsApp, combinamos o plano e o pagamento é por Pix. Depois do pagamento, o acesso é liberado no e-mail que você informar.</p></details>
-    <details><summary>Posso mandar currículo em inglês?</summary><p>Pode. Você escolhe o idioma antes de gerar, e o app recomenda um conforme a vaga.</p></details>
-    <details><summary>Posso pedir para apagar meus dados?</summary><p>Pode, a qualquer momento. Basta pedir no mesmo WhatsApp da contratação.</p></details>
-  </div>
-</section>
+  <section class="bloco">
+    <h2>O que isso não resolve.</h2>
+    <div class="prosa">
+      <p>Não garante passar na triagem. Ninguém garante, porque cada empresa configura a sua. O que dá para fazer é usar o vocabulário da vaga onde ele é verdade e entregar um formato que os sistemas leem.</p>
+      <p>Também não inventa experiência: se a vaga pede algo que você não fez, o currículo não vai fingir. E um recrutador ainda lê o resultado.</p>
+    </div>
+  </section>
 
-<section class="fecho">
-  <div class="wrap">
-    <h2>Pronto para mandar o currículo certo?</h2>
-    <a class="btn primario" href="/go/mensal">Quero contratar</a>
+  <section class="bloco">
+    <h2>Perguntas.</h2>
+    <details><summary>Preciso instalar alguma coisa?</summary><p>Não. Roda no navegador, no computador ou no celular.</p></details>
+    <details><summary>Como eu pago?</summary><p>Você chama no WhatsApp, combinamos o plano e o pagamento é por Pix. Depois do pagamento, libero o acesso no e-mail que você informar.</p></details>
+    <details><summary>Funciona em inglês?</summary><p>Funciona. Você escolhe o idioma antes de gerar, e o app sugere um conforme a vaga.</p></details>
+    <details><summary>Posso apagar os meus dados?</summary><p>Pode, a qualquer momento. É só pedir no mesmo WhatsApp da contratação.</p></details>
+  </section>
+
+  <div class="fecho">
+    <p>Se quiser testar, chama no WhatsApp.</p>
+    <a class="btn primario" href="/go/mensal">Contratar</a>
   </div>
-</section>
 </main>
 
 <footer class="rodape">
   <div class="wrap">
     <span>$produto</span>
-    <span><a href="/privacidade">Termos e Privacidade</a> &nbsp;·&nbsp; <a href="/login">Entrar</a></span>
+    <span><a href="/privacidade">Termos e Privacidade</a> &nbsp;&middot;&nbsp; <a href="/login">Entrar</a></span>
   </div>
 </footer>
 </body>

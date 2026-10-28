@@ -216,3 +216,59 @@ class TestAdmin(Ambiente):
         self.assertEqual(m["cliques_whatsapp"], {"mensal": 1})
         self.assertEqual(m["custo_ia_usd"], 0.03)
         self.assertEqual(m["usuarios_com_atividade"], 1)
+
+
+class TestUsuarioDeDesenvolvimento(Ambiente):
+    def setUp(self):
+        super().setUp()
+        self.vars = {k: os.environ.get(k) for k in ("CV_ENV", "CV_DEV_USUARIO", "CV_DEV_PLANO", "CV_DEV_TETO")}
+        for k in self.vars:
+            os.environ.pop(k, None)
+
+    def tearDown(self):
+        for k, v in self.vars.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        super().tearDown()
+
+    def test_sem_a_variavel_nada_muda(self):
+        self.assertIsNone(hospedado.dev_usuario())
+        self.assertIsNone(hospedado.reivindicacao({}))
+
+    def test_com_cv_env_dev_vale_o_usuario_fixo(self):
+        os.environ.update({"CV_ENV": "dev", "CV_DEV_USUARIO": "Teste@Exemplo.com", "CV_DEV_PLANO": "semanal", "CV_DEV_TETO": "3"})
+        c = hospedado.reivindicacao({})
+        self.assertEqual(c["uid"], seguranca.uid_do_email("teste@exemplo.com"))
+        self.assertEqual((c["plano"], c["teto"], c["dev"]), ("semanal", 3, True))
+        self.assertEqual(c["inicio"], hospedado.INICIO_DEV)         # estável: a cota acumula entre requisições
+        self.assertEqual(hospedado.reivindicacao({})["inicio"], c["inicio"])
+
+    def test_sem_cv_env_dev_recusa_e_nao_da_identidade(self):
+        os.environ["CV_DEV_USUARIO"] = "teste@exemplo.com"
+        with self.assertRaises(hospedado.ErroDev):
+            hospedado.dev_usuario()
+        self.assertIsNone(hospedado.reivindicacao({}))
+        os.environ["CV_ENV"] = "producao"
+        self.assertIsNone(hospedado.reivindicacao({}))
+
+    def test_cabecalho_assinado_tem_prioridade(self):
+        os.environ.update({"CV_ENV": "dev", "CV_DEV_USUARIO": "teste@exemplo.com"})
+        c = hospedado.reivindicacao(cab(UID_B))
+        self.assertEqual(c["uid"], UID_B)
+        self.assertNotIn("dev", c)
+
+    def test_email_invalido_nao_da_identidade(self):
+        os.environ.update({"CV_ENV": "dev", "CV_DEV_USUARIO": "isso nao e email"})
+        self.assertIsNone(hospedado.reivindicacao({}))
+
+    def test_cota_acumula_para_o_usuario_dev(self):
+        os.environ.update({"CV_ENV": "dev", "CV_DEV_USUARIO": "teste@exemplo.com", "CV_DEV_TETO": "2"})
+        from src.cota import ErroCota
+        for v in ("v1", "v2"):
+            c = hospedado.cota_do(hospedado.reivindicacao({}))
+            c.autorizar(v)
+            c.registrar(v)
+        with self.assertRaises(ErroCota):
+            hospedado.cota_do(hospedado.reivindicacao({})).autorizar("v3")

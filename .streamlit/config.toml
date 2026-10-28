@@ -11,13 +11,23 @@ toolbarMode = "minimal"
 showSidebarNavigation = false
 
 [theme]
-base = "light"
+baseRadius = "0.6rem"
+showWidgetBorder = true
+font = "sans-serif"
+
+# Com os dois temas definidos, o Streamlit segue o claro ou escuro do sistema.
+[theme.light]
 primaryColor = "#3F51B5"
 backgroundColor = "#FFFFFF"
 secondaryBackgroundColor = "#F4F6FA"
 textColor = "#1F2937"
 linkColor = "#3F51B5"
 borderColor = "#E3E7EE"
-baseRadius = "0.6rem"
-showWidgetBorder = true
-font = "sans-serif"
+
+[theme.dark]
+primaryColor = "#8C9EFF"
+backgroundColor = "#101318"
+secondaryBackgroundColor = "#1A1E26"
+textColor = "#E6E8EC"
+linkColor = "#9FB0FF"
+borderColor = "#2C323D"

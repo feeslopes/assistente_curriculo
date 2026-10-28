@@ -155,3 +155,32 @@ class TestCotaNaGeracao(TestAppHospedado):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestAppDev(TestAppHospedado):
+    def test_dev_abre_sem_cabecalho_e_avisa(self):
+        with mock.patch.dict(os.environ, {"CV_ENV": "dev", "CV_DEV_USUARIO": "teste@exemplo.com"}):
+            self.atual = {}
+            self.rodar()
+            self.assertIn("Vamos montar o seu currículo", self.textos("markdown"))
+            self.assertIn("Modo de desenvolvimento", self.textos("warning"))
+            self.assertTrue((self.tmp / "usuarios" / seguranca.uid_do_email("teste@exemplo.com")).is_dir())
+
+    def test_dev_sem_cv_env_dev_recusa_abrir_e_nao_cria_pasta(self):
+        with mock.patch.dict(os.environ, {"CV_DEV_USUARIO": "teste@exemplo.com", "CV_ENV": ""}):
+            self.atual = {}
+            self.rodar()
+            self.assertIn("CV_ENV=dev", self.textos("error"))
+            self.assertNotIn("Vamos montar o seu currículo", self.textos("markdown"))
+            self.assertFalse((self.tmp / "usuarios").exists())
+
+    def test_dev_com_dois_usuarios_ficam_isolados(self):
+        with mock.patch.dict(os.environ, {"CV_ENV": "dev", "CV_DEV_USUARIO": "a@exemplo.com"}):
+            shutil.copytree(RAIZ / "exemplo" / "base", self.tmp / "usuarios" / UID_A / "base")
+            self.rodar()
+            self.assertNotIn("Vamos montar o seu currículo", self.textos("markdown"))
+        self.st.chamadas.clear()
+        self.st.session_state.clear()
+        with mock.patch.dict(os.environ, {"CV_ENV": "dev", "CV_DEV_USUARIO": "b@exemplo.com"}):
+            self.rodar()
+            self.assertIn("Vamos montar o seu currículo", self.textos("markdown"))
