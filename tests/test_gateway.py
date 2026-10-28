@@ -209,6 +209,46 @@ class TestPaginas(Base):
         nulo = asgi.post(self.app, "/login", {"email": "maria@exemplo.com"}, headers={"origin": "null"})
         self.assertEqual(nulo.status, 403)
 
+    def test_landing_foca_na_triagem_e_no_antes_e_depois_e_nao_promete_resultado(self):
+        t = asgi.get(self.app, "/").texto
+        for trecho in ("um sistema já leu", "Como era", "Como ficou", "chegar na entrevista", "Da entrevista para a frente",
+                       "Não promete contratação"):
+            self.assertIn(trecho, t)
+
+    def test_antes_e_depois_mostra_a_vaga_o_ganho_e_a_nota(self):
+        t = asgi.get(self.app, "/").texto
+        for trecho in ("O que a vaga pede", "Como era", "Como ficou", "de 100 de aderência à vaga", "obrigatório", "desejável",
+                       'class="achou"', "ilustrativos"):
+            self.assertIn(trecho, t)
+        self.assertLess(t.index("34</span>"), t.index("78</span>"))      # a nota sobe do antes para o depois
+        self.assertNotIn("style=", t)                                     # a CSP não aceita estilo inline
+        self.assertIn("fato confirmado", t)
+        self.assertNotIn("[fato", t)                                     # sem códigos que o leitor não entende
+
+    def test_landing_nao_traz_a_secao_de_privacidade(self):
+        t = asgi.get(self.app, "/").texto
+        for trecho in ("DeepSeek", "China", "Onde ficam os seus dados", "exclusão de tudo"):
+            self.assertNotIn(trecho, t)
+        self.assertIn("/privacidade", t)          # só o link no rodapé
+
+    def test_politica_de_privacidade_seria(self):
+        t = asgi.get(self.app, "/privacidade").texto
+        for trecho in ("Lei nº 13.709/2018", "art. 18", "art. 33, VIII", "art. 7º, V", "art. 48", "controlador",
+                       "DeepSeek", "China", "90 dias", "Autoridade Nacional de Proteção de Dados", "Cookie de sessão",
+                       "Lei aplicável", "maiores de 18 anos", "Versão v1"):
+            self.assertIn(trecho, t)
+        self.assertIn("WhatsApp usado na contratação", t)
+        self.assertNotIn("$contato", t)
+
+    def test_contato_por_email_aparece_quando_configurado(self):
+        app = criar_app(self.banco, self.env, Config(url_publica="http://localhost:8080", email_contato="priv@exemplo.com"))
+        self.assertIn("priv@exemplo.com", asgi.get(app, "/privacidade").texto)
+
+    def test_aceite_pede_consentimento_especifico_para_a_ia(self):
+        _, sessao = self.entrar()
+        t = asgi.get(self.app, "/termos", headers={"cookie": f"cv_sessao={sessao}"}).texto
+        self.assertIn("provedor de IA, que fica fora do Brasil", t)
+
     def test_html_nao_executa_entrada(self):
         r = asgi.post(self.app, "/login", {"email": '"><script>alert(1)</script>@x.com'})
         self.assertNotIn("<script>alert", r.texto)

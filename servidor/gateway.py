@@ -45,7 +45,8 @@ class Config:
     url_publica: str = "http://localhost:8080"
     cookie_seguro: bool = True
     whatsapp_numero: str = ""
-    versao_termos: str = "2026-10-26"
+    versao_termos: str = "2026-10-28"
+    email_contato: str = ""
     confiar_proxy: bool = False
     preco_semanal: str = "7"
     preco_mensal: str = "15"
@@ -60,6 +61,7 @@ class Config:
             cookie_seguro=(env.get("CV_ENV") or "").strip().lower() != "dev",
             whatsapp_numero="".join(ch for ch in (env.get("WHATSAPP_NUMERO") or "") if ch.isdigit()),
             versao_termos=(env.get("CV_VERSAO_TERMOS") or cls.versao_termos).strip(),
+            email_contato=(env.get("CV_EMAIL_CONTATO") or "").strip(),
             confiar_proxy=(env.get("CV_CONFIAR_PROXY") or "").strip() == "1",
             preco_semanal=(env.get("PRECO_SEMANAL") or cls.preco_semanal).strip(),
             preco_mensal=(env.get("PRECO_MENSAL") or cls.preco_mensal).strip(),
@@ -143,8 +145,9 @@ def criar_app(banco: Banco, enviador: envio.Enviador, cfg: Config) -> Starlette:
         return {k: v[0] for k, v in parse_qs(corpo.decode("utf-8", "replace"), max_num_fields=10).items()}
 
     def comum() -> dict:
+        contato = "o mesmo WhatsApp usado na contratação" + (f", ou o e-mail {cfg.email_contato}" if cfg.email_contato else "")
         return {"produto": cfg.nome_produto, "preco_semanal": cfg.preco_semanal, "preco_mensal": cfg.preco_mensal,
-                "versao": cfg.versao_termos, **_limites_do_plano()}
+                "versao": cfg.versao_termos, "contato": contato, **_limites_do_plano()}
 
     # ------------------------------------------------------------------ páginas
     async def landing(request: Request) -> Response:
