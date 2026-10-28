@@ -1,0 +1,1 @@
+- [confirmado] Busca vagas de análise financeira e controladoria em empresas de médio e grande porte.

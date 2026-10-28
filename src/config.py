@@ -43,18 +43,60 @@ def carregar_env() -> None:
     load_dotenv(RAIZ / ".env", override=False)
 
 
+class SemUsuario(Exception):
+    """Modo hospedado sem usuário autenticado na requisição. O app para: nunca cai em uma pasta padrão."""
+
+
+_resolvedor_usuario = None
+
+
+def modo_hospedado() -> bool:
+    """CV_MODO=hospedado liga o servidor multiusuário. Qualquer outro valor é o aplicativo local de sempre."""
+    return os.environ.get("CV_MODO", "").strip().lower() == "hospedado"
+
+
+def registrar_resolvedor_usuario(funcao) -> None:
+    """Quem diz, a cada chamada, qual a pasta do usuário desta requisição (ou None se não houver)."""
+    global _resolvedor_usuario
+    _resolvedor_usuario = funcao
+
+
+def raiz_usuario() -> Path:
+    """Pasta do usuário autenticado (só no modo hospedado). Falha fechada: sem usuário, levanta SemUsuario."""
+    raiz = _resolvedor_usuario() if _resolvedor_usuario else None
+    if not raiz:
+        raise SemUsuario("Não há usuário autenticado nesta requisição.")
+    return Path(raiz)
+
+
 def base_dir() -> Path:
+    if modo_hospedado():
+        # CV_BASE_DIR é ignorado de propósito: no servidor, a pasta só vem da identidade verificada.
+        return raiz_usuario() / "base"
     valor = os.environ.get("CV_BASE_DIR", "").strip()
     return Path(valor).expanduser() if valor else RAIZ / "base"
 
 
 def saidas_dir() -> Path:
+    if modo_hospedado():
+        return raiz_usuario() / "saidas"
     return RAIZ / "saidas"
 
 
 def logs_dir() -> Path:
-    """Registro das interações com a IA. Fica dentro de saidas/, que o Git ignora."""
+    """Registro das interações com a IA. Local: dentro de saidas/, que o Git ignora. Hospedado: pasta do usuário."""
+    if modo_hospedado():
+        return raiz_usuario() / "logs"
     return saidas_dir() / "logs"
+
+
+def modelos_por_etapa() -> dict:
+    """Modelo de cada etapa (rotulo da chamada) lido do config.yaml. Vazio = tudo no modelo padrão do .env."""
+    try:
+        valor = carregar_config().get("modelos_por_etapa") or {}
+    except (ValueError, OSError):
+        return {}
+    return {str(k): str(v) for k, v in valor.items()} if isinstance(valor, dict) else {}
 
 
 def carregar_config(caminho: Path | None = None) -> dict:

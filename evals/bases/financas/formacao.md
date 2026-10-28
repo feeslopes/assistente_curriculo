@@ -1,0 +1,1 @@
+- [confirmado] Universidade Federal Exemplo | Bacharelado em Ciências Contábeis | 2012 – 2016

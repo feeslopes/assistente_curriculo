@@ -147,6 +147,8 @@ class KB:
     def _caminho(self, slug: str) -> Path | None:
         if slug in ARQUIVOS_FATOS:
             return self.base / f"{slug}.md"
+        if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,120}", str(slug)):
+            return None      # nunca monta caminho com "..", barras ou nomes estranhos (o slug pode vir da saída da IA)
         p = self.base / "experiencias" / f"{slug}.md"
         return p if p.exists() else None
 

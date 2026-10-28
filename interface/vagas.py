@@ -70,7 +70,8 @@ def _cartao(e: dict, i: int) -> None:
         if e["docx"]:
             acoes.download_button("Word", e["docx"].read_bytes(), file_name=e["docx"].name, mime=MIME_DOCX,
                                   key=f"hist_docx_{i}", icon=":material/download:")
-        if acoes.button("Abrir a pasta", key=f"hist_abrir_{i}", type="tertiary", icon=":material/folder_open:"):
+        if not config.modo_hospedado() and acoes.button("Abrir a pasta", key=f"hist_abrir_{i}", type="tertiary",
+                                                         icon=":material/folder_open:"):
             if not comum.abrir_pasta(e["pasta"]):
                 st.info(f"A pasta fica em: {e['pasta']}")
         if not e["geral"]:
@@ -96,11 +97,12 @@ def area() -> None:
                 comum.ir_para("vaga", modo="vaga")
                 st.rerun()
         return
-    topo = st.container(horizontal=True, vertical_alignment="center")
-    topo.caption(f"Os arquivos ficam em {pasta_raiz}.")
-    if topo.button("Abrir a pasta", key="btn_abrir_saidas", type="tertiary", icon=":material/folder_open:"):
-        if not comum.abrir_pasta(pasta_raiz):
-            st.info(f"A pasta fica em: {pasta_raiz}")
+    if not config.modo_hospedado():     # no servidor não há pasta para abrir, e o caminho não deve aparecer
+        topo = st.container(horizontal=True, vertical_alignment="center")
+        topo.caption(f"Os arquivos ficam em {pasta_raiz}.")
+        if topo.button("Abrir a pasta", key="btn_abrir_saidas", type="tertiary", icon=":material/folder_open:"):
+            if not comum.abrir_pasta(pasta_raiz):
+                st.info(f"A pasta fica em: {pasta_raiz}")
 
     com_indice = [e for e in entradas if e["tem_indice"] and not e["geral"]][:8]
     if com_indice:

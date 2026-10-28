@@ -11,6 +11,7 @@ from pathlib import Path
 
 import requests
 
+from . import custo
 from .texto import extrair_json, mascarar_contato, remover_raciocinio
 
 
@@ -83,7 +84,8 @@ class LLM:
     """Uma classe, uma rota (/chat/completions). A sessão HTTP é injetável para testes."""
 
     def __init__(self, cfg: Configuracao, sessao=None, dormir=time.sleep, timeout: int = 180,
-                 segredos: list[str] | None = None, log_dir: Path | None = None):
+                 segredos: list[str] | None = None, log_dir: Path | None = None,
+                 modelos_por_etapa: dict | None = None, guardar_conteudo: bool = True, ao_usar=None):
         self.cfg = cfg
         self.sessao = sessao or requests.Session()
         self._dormir = dormir
@@ -91,6 +93,19 @@ class LLM:
         self.segredos: list[str] = []
         self.definir_segredos(segredos or [])
         self.log_dir = Path(log_dir) if log_dir else None
+        # etapa (rotulo) -> modelo. Etapa sem entrada usa o modelo padrão da configuração.
+        self.modelos_por_etapa = {str(k): str(v) for k, v in (modelos_por_etapa or {}).items() if v}
+        # False no servidor: o registro guarda só metadados (etapa, tokens, custo), nunca o texto da pessoa.
+        self.guardar_conteudo = guardar_conteudo
+        # Chamado a cada resposta com os dados de uso (etapa, modelo, tokens, custo, duração). Falha nele não derruba nada.
+        self.ao_usar = ao_usar
+        self.uso_total = {"chamadas": 0, "entrada": 0, "saida": 0}
+        self.custo_usd = 0.0
+        self._uso: dict | None = None
+
+    def modelo_da_etapa(self, rotulo: str) -> str:
+        base = (rotulo or "").removesuffix("-reparo")
+        return self.modelos_por_etapa.get(base) or self.cfg.modelo
 
     # ---------------------------------------------------------------- privacidade
     def definir_segredos(self, valores) -> None:
@@ -108,11 +123,14 @@ class LLM:
         return {"Authorization": f"Bearer {self.cfg.chave}", "Content-Type": "application/json"}
 
     def _registrar(self, rotulo: str, mensagens: list[dict], json_mode: bool, resposta: str | None,
-                   erro: str | None, duracao: float) -> None:
+                   erro: str | None, duracao: float, modelo: str = "", uso: dict | None = None,
+                   custo: float | None = None) -> None:
         """Uma linha por chamada em log_dir/AAAA-MM-DD.jsonl, para depurar e melhorar os prompts.
 
         Grava o que foi enviado DEPOIS da máscara de contato (então não guarda telefone nem e-mail) e a
-        resposta recebida. A chave de API nunca entra. Falha ao gravar o log nunca derruba o aplicativo.
+        resposta recebida. A chave de API nunca entra. Com guardar_conteudo=False (servidor), grava só
+        metadados: etapa, modelo, tokens, custo, duração e tamanhos, sem nenhum texto.
+        Falha ao gravar o log nunca derruba o aplicativo.
         """
         if not self.log_dir:
             return
@@ -121,9 +139,16 @@ class LLM:
             agora = datetime.now()
             registro = {
                 "quando": agora.isoformat(timespec="seconds"), "provedor": self.cfg.provedor,
-                "modelo": self.cfg.modelo, "rotulo": rotulo, "json_mode": json_mode,
-                "duracao_s": round(duracao, 2), "mensagens": mensagens, "resposta": resposta, "erro": erro,
+                "modelo": modelo or self.cfg.modelo, "rotulo": rotulo, "json_mode": json_mode,
+                "duracao_s": round(duracao, 2), "uso": uso, "custo_usd": None if custo is None else round(custo, 6),
+                "erro": erro,
             }
+            if self.guardar_conteudo:
+                registro.update({"mensagens": mensagens, "resposta": resposta})
+            else:
+                registro.update({"mensagens_n": len(mensagens),
+                                 "chars_entrada": sum(len(m.get("content", "")) for m in mensagens),
+                                 "chars_saida": len(resposta or "")})
             with open(self.log_dir / f"{agora:%Y-%m-%d}.jsonl", "a", encoding="utf-8") as f:
                 f.write(json.dumps(registro, ensure_ascii=False) + "\n")
         except (OSError, TypeError, ValueError):
@@ -136,11 +161,13 @@ class LLM:
 
         `rotulo` só identifica a chamada no registro (entrevistador, extrator, gerador...)."""
         limpas = [{"role": m["role"], "content": self._limpar(m["content"])} for m in mensagens]
-        corpo = {"model": self.cfg.modelo, "messages": limpas, "temperature": temperatura}
+        modelo = self.modelo_da_etapa(rotulo)
+        corpo = {"model": modelo, "messages": limpas, "temperature": temperatura}
         corpo.update(self.cfg.extras)
         if json_mode:
             corpo["response_format"] = {"type": "json_object"}
         inicio, resposta, erro = time.time(), None, None
+        self._uso = None
         try:
             resposta = self._enviar(corpo)
             return resposta
@@ -148,7 +175,21 @@ class LLM:
             erro = str(e)
             raise
         finally:
-            self._registrar(rotulo, limpas, json_mode, resposta, erro, time.time() - inicio)
+            duracao = time.time() - inicio
+            uso = custo.normalizar_uso(self._uso) if self._uso else None
+            gasto = custo.custo_usd(modelo, self._uso) if self._uso else None
+            if uso:
+                self.uso_total["chamadas"] += 1
+                self.uso_total["entrada"] += uso["entrada"]
+                self.uso_total["saida"] += uso["saida"]
+                self.custo_usd += gasto or 0.0
+            self._registrar(rotulo, limpas, json_mode, resposta, erro, duracao, modelo, uso, gasto)
+            if uso and self.ao_usar:
+                try:
+                    self.ao_usar({"rotulo": rotulo, "modelo": modelo, "uso": uso, "custo_usd": gasto,
+                                  "duracao_s": round(duracao, 2), "erro": erro})
+                except Exception:  # noqa: BLE001 - medir nunca pode derrubar a geração
+                    pass
 
     def modelos(self) -> list[str]:
         url = f"{self.cfg.base_url}/models"
@@ -233,9 +274,12 @@ class LLM:
 
     def _conteudo(self, r) -> str:
         try:
-            msg = r.json()["choices"][0]["message"]
+            corpo = r.json()
+            msg = corpo["choices"][0]["message"]
             texto = msg.get("content") or ""
-        except (KeyError, IndexError, TypeError, ValueError):
+            usado = corpo.get("usage")
+            self._uso = usado if isinstance(usado, dict) else None
+        except (KeyError, IndexError, TypeError, ValueError, AttributeError):
             texto = ""
         texto = remover_raciocinio(texto)
         if not texto:

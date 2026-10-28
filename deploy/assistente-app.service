@@ -1,0 +1,26 @@
+[Unit]
+Description=Assistente Curriculo - aplicativo (Streamlit, atras do login)
+After=network.target
+
+[Service]
+User=assistente
+Group=assistente
+WorkingDirectory=/opt/assistente
+EnvironmentFile=/etc/assistente.env
+Environment=CV_MODO=hospedado
+ExecStart=/opt/assistente/.venv/bin/streamlit run app.py \
+  --server.address=127.0.0.1 --server.port=8501 --server.baseUrlPath=app --server.headless=true \
+  --server.maxUploadSize=8 --client.showErrorDetails=none --browser.gatherUsageStats=false
+Restart=on-failure
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/assistente
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

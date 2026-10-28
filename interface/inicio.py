@@ -7,9 +7,9 @@ from __future__ import annotations
 
 import streamlit as st
 
-from src import exemplo, interview
+from src import config, exemplo, interview
 from src.kb import KB
-from src.texto import detectar_idioma, extrair_contato_local, ler_arquivo, palpite_nome
+from src.texto import ErroArquivo, detectar_idioma, extrair_contato_local, ler_arquivo, palpite_nome
 
 from . import comum, estilo
 
@@ -23,7 +23,11 @@ def deve_mostrar(kb: KB) -> bool:
 
 
 def importar_curriculo(kb: KB, arquivo) -> None:
-    texto = ler_arquivo(arquivo.name, arquivo.getvalue())
+    try:
+        texto = ler_arquivo(arquivo.name, arquivo.getvalue())
+    except ErroArquivo as e:
+        st.error(str(e))
+        return
     if len(texto) < 80:
         st.error("Não consegui ler o texto desse arquivo. Se for um PDF escaneado (uma imagem), envie uma versão "
                  "em Word ou um PDF exportado do editor de texto.")
@@ -46,6 +50,8 @@ def importar_curriculo(kb: KB, arquivo) -> None:
                            texto, "curriculo importado")
     if props is comum.FALHOU:
         return
+    comum.evento("cv_importado", tipo=arquivo.name.lower().rsplit(".", 1)[-1][:5] if "." in arquivo.name else "txt",
+                 fatos_propostos=sum(len(p.fatos) for p in props))
     st.session_state["rev_id"] += 1
     st.session_state["rev_importacao"] = props
     idioma_cv, idioma_base = detectar_idioma(texto), kb.idioma_base()
@@ -79,8 +85,12 @@ def boas_vindas(kb: KB, config_erro: str | None) -> None:
             st.markdown("#### :material/description: Comece pelo currículo que você já tem")
             st.caption("Pode ser simples ou desatualizado. Eu leio, organizo e você confere tudo antes de salvar.")
             enviar_curriculo(kb, "up_inicio")
-        st.caption(":material/lock: Telefone, e-mail e endereço ficam só no seu computador. O restante do texto é "
-                   "enviado à IA (DeepSeek) para ser organizado.")
+        if config.modo_hospedado():
+            st.caption(":material/lock: Telefone, e-mail e links são removidos antes do envio à IA. O restante do texto "
+                       "vai ao DeepSeek (servidores na China) para ser organizado. Veja os Termos e Privacidade.")
+        else:
+            st.caption(":material/lock: Telefone, e-mail e endereço ficam só no seu computador. O restante do texto é "
+                       "enviado à IA (DeepSeek) para ser organizado.")
     st.write("")
     c1, c2 = st.columns(2)
     with c1.container(border=True):
@@ -90,13 +100,14 @@ def boas_vindas(kb: KB, config_erro: str | None) -> None:
                      disabled=bool(config_erro)):
             comum.ir_para("historico", vista="conversa", comecar_conversando=True)
             st.rerun()
-    with c2.container(border=True):
-        st.markdown("**Só quer ver como funciona?**")
-        st.caption("Carrega o histórico de uma pessoa fictícia e duas vagas de exemplo.")
-        if st.button("Usar dados de exemplo", key="btn_exemplo", icon=":material/science:"):
-            if exemplo.copiar_exemplo(kb):
-                st.session_state["base_v"] += 1
-                comum.avisar("success", "Dados de exemplo carregados. Veja o histórico abaixo e, depois, experimente "
-                                        "uma vaga em **Novo currículo**.")
-            comum.ir_para("historico", vista="visao")
-            st.rerun()
+    if not config.modo_hospedado():       # dados de exemplo só no app local
+        with c2.container(border=True):
+            st.markdown("**Só quer ver como funciona?**")
+            st.caption("Carrega o histórico de uma pessoa fictícia e duas vagas de exemplo.")
+            if st.button("Usar dados de exemplo", key="btn_exemplo", icon=":material/science:"):
+                if exemplo.copiar_exemplo(kb):
+                    st.session_state["base_v"] += 1
+                    comum.avisar("success", "Dados de exemplo carregados. Veja o histórico abaixo e, depois, experimente "
+                                            "uma vaga em **Novo currículo**.")
+                comum.ir_para("historico", vista="visao")
+                st.rerun()

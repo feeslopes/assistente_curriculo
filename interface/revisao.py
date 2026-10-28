@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from src import interview
+from src import config, interview
 from src.kb import KB
 
 from . import comum
@@ -67,7 +67,8 @@ def formulario(chave: str, propostas: list, rev_id: int, kb: KB, com_contato: bo
         if com_contato:
             with st.container(border=True):
                 st.markdown("**:material/badge: Seus dados**")
-                st.caption(":material/lock: Ficam só neste computador. Entram no topo do currículo e nunca são enviados à IA.")
+                st.caption((":material/lock: Ficam guardados na sua conta. Entram no topo do currículo e nunca são enviados à IA."
+                if config.modo_hospedado() else ":material/lock: Ficam só neste computador. Entram no topo do currículo e nunca são enviados à IA."))
                 contato = campos_contato(kb, f"rc_{rev_id}")
         for i in _ordem(kb, propostas):
             p = propostas[i]
@@ -101,6 +102,8 @@ def formulario(chave: str, propostas: list, rev_id: int, kb: KB, com_contato: bo
     r = comum.executar("Salvando...", interview.aplicar, kb, propostas, marcados, True)
     if r is comum.FALHOU:
         return None
+    comum.evento("base_atualizada", confirmados=r["confirmados"], pendentes=r["pendentes"],
+                 experiencias=r["experiencias_criadas"], ignorados=r["ignorados"])
     if contato is not None:
         kb.salvar_contato(contato)
     return r

@@ -11,7 +11,7 @@ import streamlit as st
 
 from src import aderencia, config, export, historico, relatorio, saidas, tailor
 from src.kb import KB
-from src.texto import ler_arquivo
+from src.texto import ErroArquivo, ler_arquivo
 
 from . import comum, estilo, revisao
 
@@ -32,6 +32,11 @@ def analisar_vaga(kb: KB, vaga: str) -> bool:
         comum.obter_llm(kb), kb, vaga))
     if analise is comum.FALHOU:
         return False
+    reqs = analise.get("requisitos", [])
+    comum.evento("vaga_analisada", idioma=str(analise.get("idioma_vaga") or "?")[:10].lower(), requisitos=len(reqs),
+                 cobertos=sum(1 for r in reqs if r.get("status") == "coberto"),
+                 parciais=sum(1 for r in reqs if r.get("status") == "parcial"),
+                 lacunas=sum(1 for r in reqs if r.get("status") == "lacuna"))
     st.session_state["analise_id"] += 1
     st.session_state.update(analise=analise, vaga_analisada=vaga, resultado=None, trad=None, rev_lacuna=None,
                             passo_vaga=2)
@@ -50,7 +55,12 @@ def passo_vaga(kb: KB) -> None:
     escrito = st.text_area("Cole aqui o texto completo da vaga", height=260, key="vaga_texto",
                            placeholder="Título, empresa, responsabilidades, requisitos... Quanto mais completo, melhor.")
     arq = st.file_uploader("Ou envie a vaga em arquivo", type=comum.TIPOS_ARQUIVO, key="vaga_arquivo")
-    vaga = escrito.strip() or (ler_arquivo(arq.name, arq.getvalue()) if arq is not None else "")
+    vaga = escrito.strip()
+    if not vaga and arq is not None:
+        try:
+            vaga = ler_arquivo(arq.name, arq.getvalue())
+        except ErroArquivo as e:
+            st.error(str(e))
     st.caption("O app não abre links de vaga (os sites bloqueiam). Copie e cole o texto.")
     if st.button("Analisar vaga", key="btn_analisar", type="primary", disabled=not vaga, icon=":material/search:"):
         if analisar_vaga(kb, vaga):
@@ -304,8 +314,9 @@ def opcoes_e_gerar(kb: KB, cfg: dict, analise: dict) -> None:
             comum.ir_para("historico", vista="dados")
             st.rerun()
     if st.button("Gerar currículo", key="btn_gerar", type="primary", icon=":material/auto_awesome:"):
-        res = comum.executar("Escrevendo e conferindo o currículo. Isso leva de um a dois minutos...", lambda: tailor.gerar(
-            comum.obter_llm(kb), kb, vaga, analise, idioma, cfg, titulo or None, True, manuais))
+        res = comum.executar("Escrevendo e conferindo o currículo. Isso leva de um a dois minutos...",
+                             lambda: comum.gerar_com_cota(vaga, lambda: tailor.gerar(
+                                 comum.obter_llm(kb), kb, vaga, analise, idioma, cfg, titulo or None, True, manuais)))
         if res is not comum.FALHOU:
             st.session_state["gen_id"] += 1
             st.session_state["resultado"] = res
@@ -390,7 +401,7 @@ def vista_curriculo(kb: KB, res, cfg: dict, texto_atual: str, comp: dict | None,
                               type="primary", icon=":material/download:")
         barra.download_button("Baixar Word", docx, file_name=f"{nome}.docx", key="dl_docx", icon=":material/download:",
                               mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-    if pasta and barra.button("Abrir a pasta", key="btn_abrir_pasta", icon=":material/folder_open:"):
+    if pasta and not config.modo_hospedado() and barra.button("Abrir a pasta", key="btn_abrir_pasta", icon=":material/folder_open:"):
         if not comum.abrir_pasta(pasta):
             st.info(f"A pasta fica em: {pasta}")
     limite = int(cfg.get("max_paginas", 2))

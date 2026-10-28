@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Termos de uso | $produto</title>
+<link rel="stylesheet" href="/static/estilo.css">
+</head>
+<body class="centro">
+<header class="wrap topo">
+  <a class="marca" href="/">$produto</a>
+</header>
+<main>
+  <div class="caixa larga">
+    <h1>Antes de começar</h1>
+    <p>Para usar o $produto, leia e aceite os termos. Guardamos a data e a versão do seu aceite.</p>
+    $erro_html
+    <div class="termos-texto" tabindex="0">
+      <h2>O que você está aceitando</h2>
+      <p>O serviço guarda o seu histórico profissional e as vagas que você analisa, e usa inteligência artificial para escrever currículos a partir do que você confirmou.</p>
+      <h2>Dados e IA</h2>
+      <p>O texto das gerações é enviado ao provedor de IA (DeepSeek), cujos servidores ficam na China. Telefone, e-mail e links são removidos antes do envio. O restante do texto é enviado.</p>
+      <h2>Guarda e exclusão</h2>
+      <p>Mantemos seus dados enquanto o acesso estiver ativo e por até 90 dias de inatividade. Você pode pedir a exclusão a qualquer momento.</p>
+      <h2>Responsabilidade</h2>
+      <p>Você revisa o currículo antes de usar e responde pelas informações que confirmou. Não garantimos aprovação em triagens nem contratação.</p>
+      <h2>Uso do acesso</h2>
+      <p>O acesso é pessoal. O plano tem limite de gerações por período.</p>
+      <p>O texto completo está em <a href="/privacidade" target="_blank" rel="noopener">Termos de Uso e Política de Privacidade</a>. Versão $versao.</p>
+    </div>
+    <form method="post" action="/termos">
+      <label class="marcar"><input type="checkbox" name="aceito" value="sim" required> <span>Li e aceito os Termos de Uso e a Política de Privacidade, inclusive o envio do texto das gerações ao provedor de IA, que fica fora do Brasil.</span></label>
+      <button class="btn primario cheio" type="submit">Aceitar e entrar</button>
+    </form>
+  </div>
+</main>
+</body>
+</html>
